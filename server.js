@@ -64,6 +64,13 @@ app.get('/swatches', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'swatches.html'));
 });
 
+app.get('/api/public/settings', (req, res) => {
+  const rowsRow = db.prepare('SELECT value FROM settings WHERE key=?').get('rows');
+  let rows = 3; // default
+  try { const v = JSON.parse(rowsRow?.value); if (Number.isInteger(v) && v >= 1) rows = v; } catch {}
+  res.json({ rows });
+});
+
 app.get('/api/public/filaments', (req, res) => {
   const enabledRow = db.prepare('SELECT value FROM settings WHERE key=?').get('publicViewEnabled');
   let enabled = false;

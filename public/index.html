@@ -877,6 +877,8 @@
     const carousel = $('#carousel');
     const emptyMsg  = $('#emptyMsg');
     const tpl       = $('#swatchTpl');
+    const prevBtn   = $('#prevBtn');
+    const nextBtn   = $('#nextBtn');
 
     function computeColumns(){
       const sw=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--swatch-w'))||240;
@@ -893,10 +895,16 @@
       const ordered = sortLightToDark(applyFilters(items));
       carousel.innerHTML = '';
       emptyMsg.hidden = ordered.length > 0;
-      if (!ordered.length) return;
+      if (!ordered.length) {
+        prevBtn.classList.add('hidden');
+        nextBtn.classList.add('hidden');
+        return;
+      }
 
       const rows = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rows'))||2;
       const pages = paginate(ordered, rows, computeColumns());
+      prevBtn.classList.toggle('hidden', pages.length <= 1);
+      nextBtn.classList.toggle('hidden', pages.length <= 1);
 
       for (let p=0; p<pages.length; p++){
         const pageEl = document.createElement('div');

@@ -15,7 +15,7 @@
       --primary:    #0f766e;
       --radius:     6px;
       --shadow:     0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
-      --rows:      2;
+      --rows:      3;
       --swatch-w:  240px;
       --swatch-h:  142px;
       --gap:       12px;
@@ -313,6 +313,8 @@
     const carousel = $('#carousel');
     const emptyMsg  = $('#emptyMsg');
     const tpl       = $('#swatchTpl');
+    const prevBtn   = $('#prevBtn');
+    const nextBtn   = $('#nextBtn');
 
     function computeColumns(){
       const sw=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--swatch-w'))||240;
@@ -328,10 +330,16 @@
       const ordered=sortLightToDark(applyFilters(items));
       carousel.innerHTML='';
       emptyMsg.classList.toggle('hidden', ordered.length>0);
-      if(!ordered.length)return;
+      if(!ordered.length){
+        prevBtn.classList.add('hidden');
+        nextBtn.classList.add('hidden');
+        return;
+      }
 
-      const rows=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rows'))||2;
+      const rows=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rows'))||3;
       const pages=paginate(ordered,rows,computeColumns());
+      prevBtn.classList.toggle('hidden', pages.length<=1);
+      nextBtn.classList.toggle('hidden', pages.length<=1);
 
       for(let p=0;p<pages.length;p++){
         const pageEl=document.createElement('div');
@@ -401,6 +409,13 @@
         $('#countChip').textContent=`${items.length} item${items.length===1?'':'s'}`;
         $('#countChip').classList.remove('hidden');
         $('#mainContent').classList.remove('hidden');
+        try {
+          const s = await fetch('/api/public/settings');
+          if (s.ok) {
+            const { rows } = await s.json();
+            document.documentElement.style.setProperty('--rows', rows);
+          }
+        } catch {}
         render();
       } catch(e) {
         $('#disabledMsg').classList.remove('hidden');
