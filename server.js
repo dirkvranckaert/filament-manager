@@ -2,10 +2,30 @@ require('dotenv').config();
 const express = require('express');
 const crypto  = require('crypto');
 const path    = require('path');
+const fs      = require('fs');
+const multer  = require('multer');
+const AdmZip  = require('adm-zip');
 const db = require('./db');
 
 const app = express();
 app.use(express.json());
+
+// --- Uploads directory ---
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+fs.mkdirSync(uploadsDir, { recursive: true });
+
+// --- Multer: pattern image upload (memory storage — file written manually in the route handler) ---
+const uploadPattern = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter(req, file, cb) {
+    if (!file.mimetype.startsWith('image/')) return cb(new Error('Images only'));
+    cb(null, true);
+  }
+});
+
+// --- Multer: ZIP backup import ---
+const uploadZip = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 // --- Session store ---
 const sessions = new Set();
@@ -60,6 +80,9 @@ app.get('/api/public/filaments', (req, res) => {
   res.json(rows.map(toClient));
 });
 
+// --- Serve uploaded pattern images publicly (needed for /swatches page) ---
+app.use('/uploads', express.static(uploadsDir));
+
 // --- Session auth middleware ---
 app.use((req, res, next) => {
   if (req.path === '/favicon.svg') return next();
@@ -82,7 +105,7 @@ app.post('/api/filaments', (req, res) => {
   const result = db.prepare(
     'INSERT INTO filaments (brand, colorName, type, variant, inStock, colorR, colorG, colorB, colorHex) VALUES (?,?,?,?,?,?,?,?,?)'
   ).run(f.brand, f.colorName, f.type, f.variant, f.inStock, f.colorR, f.colorG, f.colorB, f.colorHex);
-  res.status(201).json(toClient({ id: result.lastInsertRowid, ...f }));
+  res.status(201).json(toClient({ id: result.lastInsertRowid, ...f, patternImage: null }));
 });
 
 app.put('/api/filaments/:id', (req, res) => {
@@ -90,11 +113,42 @@ app.put('/api/filaments/:id', (req, res) => {
   db.prepare(
     'UPDATE filaments SET brand=?, colorName=?, type=?, variant=?, inStock=?, colorR=?, colorG=?, colorB=?, colorHex=? WHERE id=?'
   ).run(f.brand, f.colorName, f.type, f.variant, f.inStock, f.colorR, f.colorG, f.colorB, f.colorHex, req.params.id);
-  res.json(toClient({ id: Number(req.params.id), ...f }));
+  const row = db.prepare('SELECT * FROM filaments WHERE id=?').get(req.params.id);
+  res.json(toClient(row));
 });
 
 app.delete('/api/filaments/:id', (req, res) => {
+  const row = db.prepare('SELECT patternImage FROM filaments WHERE id=?').get(req.params.id);
+  if (row?.patternImage) {
+    try { fs.unlinkSync(path.join(uploadsDir, row.patternImage)); } catch {}
+  }
   db.prepare('DELETE FROM filaments WHERE id=?').run(req.params.id);
+  res.status(204).end();
+});
+
+// --- Pattern image ---
+app.post('/api/filaments/:id/pattern', uploadPattern.single('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  const row = db.prepare('SELECT patternImage FROM filaments WHERE id=?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  // Delete old pattern file if one exists
+  if (row.patternImage) {
+    try { fs.unlinkSync(path.join(uploadsDir, row.patternImage)); } catch {}
+  }
+  const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+  const filename = `pattern_${req.params.id}${ext}`;
+  fs.writeFileSync(path.join(uploadsDir, filename), req.file.buffer);
+  db.prepare('UPDATE filaments SET patternImage=? WHERE id=?').run(filename, req.params.id);
+  res.json({ patternImage: filename });
+});
+
+app.delete('/api/filaments/:id/pattern', (req, res) => {
+  const row = db.prepare('SELECT patternImage FROM filaments WHERE id=?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  if (row.patternImage) {
+    try { fs.unlinkSync(path.join(uploadsDir, row.patternImage)); } catch {}
+    db.prepare('UPDATE filaments SET patternImage=NULL WHERE id=?').run(req.params.id);
+  }
   res.status(204).end();
 });
 
@@ -115,25 +169,59 @@ app.put('/api/settings/:key', (req, res) => {
   res.json({ key: req.params.key, value });
 });
 
-// --- Export ---
+// --- Export (ZIP with filaments.json + pattern images) ---
 app.get('/api/export', (req, res) => {
   const rows = db.prepare('SELECT * FROM filaments').all();
+  const zip = new AdmZip();
+  zip.addFile('filaments.json', Buffer.from(JSON.stringify(rows.map(toClient), null, 2)));
+  for (const row of rows) {
+    if (row.patternImage) {
+      const filePath = path.join(uploadsDir, row.patternImage);
+      if (fs.existsSync(filePath)) zip.addLocalFile(filePath, 'uploads');
+    }
+  }
   const date = new Date().toISOString().slice(0, 10);
-  res.setHeader('Content-Disposition', `attachment; filename="filaments-export-${date}.json"`);
-  res.json(rows.map(toClient));
+  res.setHeader('Content-Disposition', `attachment; filename="filaments-backup-${date}.zip"`);
+  res.setHeader('Content-Type', 'application/zip');
+  res.send(zip.toBuffer());
 });
 
-// --- Import ---
-app.post('/api/import', (req, res) => {
-  const data = req.body;
-  if (!Array.isArray(data)) return res.status(400).json({ error: 'Expected an array' });
+// --- Import (ZIP with images, or legacy JSON body) ---
+app.post('/api/import', uploadZip.single('backup'), (req, res) => {
+  let data;
+  if (req.file) {
+    // ZIP import
+    let zip;
+    try { zip = new AdmZip(req.file.buffer); } catch { return res.status(400).json({ error: 'Invalid ZIP file' }); }
+    const jsonEntry = zip.getEntry('filaments.json');
+    if (!jsonEntry) return res.status(400).json({ error: 'Missing filaments.json in ZIP' });
+    try { data = JSON.parse(jsonEntry.getData().toString('utf8')); } catch { return res.status(400).json({ error: 'Invalid filaments.json' }); }
+    if (!Array.isArray(data)) return res.status(400).json({ error: 'Invalid filaments.json' });
+    // Extract images
+    for (const entry of zip.getEntries()) {
+      if (entry.entryName.startsWith('uploads/') && !entry.isDirectory) {
+        const filename = path.basename(entry.entryName);
+        fs.writeFileSync(path.join(uploadsDir, filename), entry.getData());
+      }
+    }
+  } else {
+    // Legacy JSON body
+    data = req.body;
+    if (!Array.isArray(data)) return res.status(400).json({ error: 'Expected an array' });
+  }
   db.transaction(() => {
+    // Delete existing pattern files before clearing DB
+    const existing = db.prepare('SELECT patternImage FROM filaments').all();
+    for (const row of existing) {
+      if (row.patternImage) try { fs.unlinkSync(path.join(uploadsDir, row.patternImage)); } catch {}
+    }
     db.prepare('DELETE FROM filaments').run();
     for (const item of data) {
       const f = fromBody(item);
+      const patternImage = item.patternImage || null;
       db.prepare(
-        'INSERT INTO filaments (brand, colorName, type, variant, inStock, colorR, colorG, colorB, colorHex) VALUES (?,?,?,?,?,?,?,?,?)'
-      ).run(f.brand, f.colorName, f.type, f.variant, f.inStock, f.colorR, f.colorG, f.colorB, f.colorHex);
+        'INSERT INTO filaments (brand, colorName, type, variant, inStock, colorR, colorG, colorB, colorHex, patternImage) VALUES (?,?,?,?,?,?,?,?,?,?)'
+      ).run(f.brand, f.colorName, f.type, f.variant, f.inStock, f.colorR, f.colorG, f.colorB, f.colorHex, patternImage);
     }
   })();
   res.json({ ok: true });
@@ -160,14 +248,15 @@ function fromBody(body) {
 
 function toClient(row) {
   return {
-    id:        row.id,
-    brand:     row.brand,
-    colorName: row.colorName,
-    type:      row.type,
-    variant:   row.variant,
-    inStock:   !!row.inStock,
-    colorRGB:  { r: row.colorR, g: row.colorG, b: row.colorB },
-    colorHex:  row.colorHex,
+    id:           row.id,
+    brand:        row.brand,
+    colorName:    row.colorName,
+    type:         row.type,
+    variant:      row.variant,
+    inStock:      !!row.inStock,
+    colorRGB:     { r: row.colorR, g: row.colorG, b: row.colorB },
+    colorHex:     row.colorHex,
+    patternImage: row.patternImage || null,
   };
 }
 

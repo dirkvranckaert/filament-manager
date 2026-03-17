@@ -255,6 +255,12 @@
     .form-group input[type="range"] { width: 100%; cursor: pointer; }
     .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
+    /* ── Pattern image upload ── */
+    .pattern-upload-wrap { display: flex; flex-direction: column; gap: 8px; }
+    .pattern-preview { width: 80px; height: 80px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); }
+    .pattern-upload-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .pattern-hint { font-size: 11px; color: var(--text-muted); }
+
     /* ── Context menu ── */
     .ctx-menu {
       position: fixed; background: var(--surface); border: 1px solid var(--border);
@@ -413,6 +419,24 @@
               </div>
             </div>
           </div>
+          <div class="row" style="grid-column:span 12;margin-top:4px">
+            <div class="form-field" style="grid-column:span 12">
+              <label>Pattern image <span style="font-weight:400;color:var(--text-muted)">(optional — square image)</span></label>
+              <div class="pattern-upload-wrap">
+                <div id="patternPreviewWrap" class="hidden" style="gap:10px;align-items:center">
+                  <img id="patternPreviewImg" class="pattern-preview" src="" alt="Pattern preview" />
+                  <button type="button" class="btn btn-danger" id="patternRemoveBtn">Remove</button>
+                </div>
+                <div class="pattern-upload-row">
+                  <label class="btn btn-secondary" style="cursor:pointer">
+                    Upload image <input type="file" id="patternFileInput" accept="image/*" style="display:none" />
+                  </label>
+                  <span id="patternFileName" class="pattern-hint">No file selected</span>
+                </div>
+                <span class="pattern-hint">Square image — will fill the swatch visually. Hex color is still used for sorting.</span>
+              </div>
+            </div>
+          </div>
         </form>
       </div>
       <div class="modal-footer">
@@ -471,11 +495,11 @@
         <div class="form-group">
           <label>Data</label>
           <div style="display:flex;gap:8px;margin-top:6px">
-            <button type="button" id="exportBtn" class="btn btn-secondary">↓ Export JSON</button>
-            <button type="button" id="importBtn" class="btn btn-secondary">↑ Import JSON</button>
-            <input type="file" id="importFile" accept="application/json" style="display:none" />
+            <button type="button" id="exportBtn" class="btn btn-secondary">↓ Backup (ZIP)</button>
+            <button type="button" id="importBtn" class="btn btn-secondary">↑ Restore (ZIP / JSON)</button>
+            <input type="file" id="importFile" accept=".zip,application/json" style="display:none" />
           </div>
-          <p style="font-size:12px;color:var(--text-muted);margin-top:6px">Import replaces all existing data.</p>
+          <p style="font-size:12px;color:var(--text-muted);margin-top:6px">Restore replaces all existing data. Accepts .zip backup or legacy .json file.</p>
         </div>
       </div>
       <div class="modal-footer">
@@ -565,6 +589,8 @@
     let items = [];
     let editingId = null;
     let pendingScrollToId = null;
+    let pendingPatternFile = null;
+    let removePatternImage = false;
 
     // ===== Form elements =====
     const formPanel  = $('#formPanel');
@@ -646,9 +672,46 @@
     b.addEventListener('input', syncFromRGB);
     inStock.addEventListener('change', ()=>{ inStockLbl.textContent = inStock.checked?'Yes':'No'; });
 
+    // ===== Pattern image helpers =====
+    function updatePatternPreview(patternImage) {
+      const wrap = $('#patternPreviewWrap');
+      const img  = $('#patternPreviewImg');
+      if (patternImage && !removePatternImage) {
+        img.src = `/uploads/${patternImage}`;
+        wrap.classList.remove('hidden');
+        wrap.style.display = 'flex';
+      } else {
+        wrap.classList.add('hidden');
+        wrap.style.display = 'none';
+      }
+    }
+    $('#patternFileInput').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      pendingPatternFile = file;
+      removePatternImage = false;
+      $('#patternFileName').textContent = file.name;
+      const url = URL.createObjectURL(file);
+      $('#patternPreviewImg').src = url;
+      $('#patternPreviewWrap').classList.remove('hidden');
+      $('#patternPreviewWrap').style.display = 'flex';
+    });
+    $('#patternRemoveBtn').addEventListener('click', () => {
+      pendingPatternFile = null;
+      removePatternImage = true;
+      $('#patternFileName').textContent = 'No file selected';
+      $('#patternFileInput').value = '';
+      $('#patternPreviewWrap').classList.add('hidden');
+      $('#patternPreviewWrap').style.display = 'none';
+    });
+
     // ===== Open / close form modal =====
     function openForm(editId=null){
       editingId = editId;
+      pendingPatternFile = null;
+      removePatternImage = false;
+      $('#patternFileName').textContent = 'No file selected';
+      $('#patternFileInput').value = '';
       formTitle.textContent = editId ? 'Edit Filament' : 'Add Filament';
       formPanel.style.display = 'flex';
       if (editId) {
@@ -658,11 +721,13 @@
         inStock.checked=!!it.inStock; inStockLbl.textContent=inStock.checked?'Yes':'No';
         const rgb=it.colorRGB; r.value=rgb.r; g.value=rgb.g; b.value=rgb.b;
         hex.value=it.colorHex; picker.value=it.colorHex; setPreview(rgb);
+        updatePatternPreview(it.patternImage);
       } else {
         fid.value=''; brand.value=''; colorName.value=''; type.value='PLA'; variant.value='Basic';
         inStock.checked=true; inStockLbl.textContent='Yes';
         hex.value=DEFAULT_COLOR; picker.value=DEFAULT_COLOR;
         const rgb=rgbFromHex(DEFAULT_COLOR); r.value=rgb.r; g.value=rgb.g; b.value=rgb.b; setPreview(rgb);
+        updatePatternPreview(null);
       }
       brand.focus();
     }
@@ -710,17 +775,29 @@
         return;
       }
       try {
+        let savedId;
         if (editingId){
           const updated = await api('PUT', `/api/filaments/${editingId}`, candidate);
           items = items.map(x=>x.id===editingId?updated:x);
+          savedId = updated.id;
           pendingScrollToId = updated.id;
         } else {
           const created = await api('POST', '/api/filaments', candidate);
           items.push(created);
+          savedId = created.id;
           pendingScrollToId = created.id;
         }
+        if (removePatternImage) {
+          const pr = await fetch(`/api/filaments/${savedId}/pattern`, { method: 'DELETE' });
+          if (!pr.ok) throw new Error(`Pattern remove failed: ${pr.status}`);
+        } else if (pendingPatternFile) {
+          const fd = new FormData();
+          fd.append('image', pendingPatternFile);
+          const pr = await fetch(`/api/filaments/${savedId}/pattern`, { method: 'POST', body: fd });
+          if (!pr.ok) { const e = await pr.json().catch(()=>({})); throw new Error(`Pattern upload failed: ${e.error||pr.status}`); }
+        }
+        await loadAndRender();
         closeForm();
-        render();
       } catch(err){ alert('Save failed: '+err.message); }
     });
 
@@ -831,7 +908,14 @@
         for (const it of pages[p]){
           const node = tpl.content.firstElementChild.cloneNode(true);
           node.dataset.id = it.id;
-          node.style.background = it.colorHex;
+          node.style.backgroundColor = it.colorHex;
+          if (it.patternImage) {
+            node.style.backgroundImage = `url(/uploads/${encodeURIComponent(it.patternImage)})`;
+            node.style.backgroundSize = 'cover';
+            node.style.backgroundPosition = 'center';
+          } else {
+            node.style.backgroundImage = '';
+          }
           node.style.color = bestTextColor(it.colorRGB);
 
           node.querySelector('.name').textContent = it.brand;
@@ -922,18 +1006,16 @@
     // ===== Import / Export =====
     $('#exportBtn').addEventListener('click', ()=>{ const a=document.createElement('a'); a.href='/api/export'; a.click(); });
     $('#importBtn').addEventListener('click', ()=>$('#importFile').click());
-    $('#importFile').addEventListener('change', e=>{
+    $('#importFile').addEventListener('change', async e=>{
       const file=e.target.files[0]; if(!file) return;
-      const reader=new FileReader();
-      reader.onload = async ()=>{
-        try {
-          const data=JSON.parse(reader.result);
-          if(!Array.isArray(data)) throw new Error('Invalid JSON format');
-          await api('POST','/api/import',data);
-          await loadAndRender();
-        } catch(err){ alert('Import failed: '+err.message); }
-      };
-      reader.readAsText(file);
+      try {
+        const fd = new FormData();
+        fd.append('backup', file);
+        const res = await fetch('/api/import', { method: 'POST', body: fd });
+        if (!res.ok) { const err = await res.json().catch(()=>({})); throw new Error(err.error||'Import failed'); }
+        await loadAndRender();
+      } catch(err){ alert('Import failed: '+err.message); }
+      e.target.value = '';
     });
 
     // ===== Theme =====

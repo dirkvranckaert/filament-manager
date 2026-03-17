@@ -342,7 +342,14 @@
 
         for(const it of pages[p]){
           const node=tpl.content.firstElementChild.cloneNode(true);
-          node.style.background=it.colorHex;
+          node.style.backgroundColor=it.colorHex;
+          if(it.patternImage){
+            node.style.backgroundImage=`url(/uploads/${encodeURIComponent(it.patternImage)})`;
+            node.style.backgroundSize='cover';
+            node.style.backgroundPosition='center';
+          } else {
+            node.style.backgroundImage='';
+          }
           node.style.color=bestTextColor(it.colorRGB);
           node.querySelector('.name').textContent=it.brand;
           node.querySelector('.meta').textContent=`${it.type} (${it.variant||'Basic'}) — ${it.colorName}`;

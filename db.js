@@ -27,4 +27,7 @@ db.exec(`
   );
 `);
 
+// Migration: add patternImage column if not already present
+try { db.exec('ALTER TABLE filaments ADD COLUMN patternImage TEXT'); } catch {}
+
 module.exports = db;

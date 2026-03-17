@@ -9,6 +9,9 @@ node_modules/
 # Database — contains live user data
 data/
 
+# Uploaded pattern images — runtime assets, not source code
+public/uploads/
+
 # macOS
 .DS_Store
 .AppleDouble
