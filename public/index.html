@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Filament Manager</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    :root {
+      --bg:         #f1f5f9;
+      --surface:    #ffffff;
+      --border:     #e2e8f0;
+      --text:       #1a202c;
+      --text-muted: #718096;
+      --primary:    #0f766e;
+      --primary-h:  #0d6059;
+      --danger:     #e53e3e;
+      --radius:     6px;
+      --shadow:     0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+      --rows:      2;
+      --swatch-w:  240px;
+      --swatch-h:  142px;
+      --gap:       12px;
+    }
+    /* Dark theme (manual) */
+    :root[data-theme="dark"] {
+      --bg:         #0f172a;
+      --surface:    #1e293b;
+      --border:     #334155;
+      --text:       #f1f5f9;
+      --text-muted: #94a3b8;
+      --primary:    #14b8a6;
+      --primary-h:  #0d9488;
+      --danger:     #fc8181;
+      --shadow:     0 1px 3px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.25);
+    }
+    /* Dark theme (system preference) */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]):not([data-theme="dark"]) {
+        --bg:         #0f172a;
+        --surface:    #1e293b;
+        --border:     #334155;
+        --text:       #f1f5f9;
+        --text-muted: #94a3b8;
+        --primary:    #14b8a6;
+        --primary-h:  #0d9488;
+        --danger:     #fc8181;
+        --shadow:     0 1px 3px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.25);
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px; color: var(--text); background: var(--bg); min-height: 100vh;
+    }
+
+    /* ── Topbar ── */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; height: 52px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow); position: sticky; top: 0; z-index: 10;
+    }
+    .app-title { font-size: 18px; font-weight: 700; color: var(--primary); }
+    .topbar-right { display: flex; gap: 8px; align-items: center; }
+    .count-chip {
+      font-size: 12px; color: var(--text-muted); background: var(--bg);
+      border: 1px solid var(--border); padding: 3px 10px; border-radius: 999px; font-weight: 500;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 6px 14px; border: 1px solid transparent; border-radius: var(--radius);
+      cursor: pointer; font-size: 13px; font-weight: 500;
+      transition: background .15s, border-color .15s, color .15s;
+      white-space: nowrap; font-family: inherit;
+    }
+    .btn-primary   { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .btn-primary:hover { background: var(--primary-h); border-color: var(--primary-h); }
+    .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+    .btn-secondary:hover { background: var(--bg); }
+    .btn-danger    { background: var(--surface); color: var(--danger); border-color: var(--danger); }
+    .btn-danger:hover { background: rgba(229,62,62,.12); color: var(--danger); }
+    .hidden { display: none !important; }
+
+    /* ── Page layout ── */
+    .page-content {
+      max-width: 1200px; margin: 0 auto; padding: 20px 16px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+
+    /* ── Cards ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); }
+    .card-header {
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+      font-size: 11px; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .5px;
+    }
+    .card-body { padding: 16px; }
+
+    /* ── Forms ── */
+    .form-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; }
+    .form-field { display: flex; flex-direction: column; gap: 5px; }
+    .form-field label { font-size: 13px; font-weight: 500; }
+    .form-field input,
+    .form-field select {
+      width: 100%; padding: 7px 10px; border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: 13px; color: var(--text);
+      background: var(--surface); font-family: inherit;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .form-field input:focus, .form-field select:focus {
+      outline: none; border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(15,118,110,.15);
+    }
+    .row   { grid-column: span 12; }
+    .col-2 { grid-column: span 2; }
+    .col-3 { grid-column: span 3; }
+    .col-4 { grid-column: span 4; }
+    .col-6 { grid-column: span 6; }
+    .form-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 4px; }
+
+    /* ── Filters ── */
+    .filters-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+    /* ── Toggle switch ── */
+    .switch { display: flex; align-items: center; gap: 8px; padding-top: 4px; }
+    .switch input[type="checkbox"] {
+      width: 42px; height: 24px; appearance: none; -webkit-appearance: none;
+      background: var(--border); border-radius: 999px; position: relative;
+      outline: none; cursor: pointer; transition: background .2s; flex-shrink: 0;
+    }
+    .switch input[type="checkbox"]:checked { background: #16a34a; }
+    .switch input[type="checkbox"]::after {
+      content: ""; position: absolute; top: 2px; left: 3px;
+      width: 20px; height: 20px; background: white; border-radius: 999px;
+      transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .switch input[type="checkbox"]:checked::after { transform: translateX(16px); }
+    .switch-label { font-size: 13px; color: var(--text-muted); }
+
+    /* ── Color row ── */
+    .color-row { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; align-items: end; }
+    .color-badge-wrap { position: relative; }
+    .color-badge {
+      width: 100%; padding: 7px 10px; border-radius: var(--radius); border: 1px solid var(--border);
+      font-size: 13px; cursor: pointer; text-align: center; font-family: inherit;
+    }
+    .color-badge-wrap input[type="color"] {
+      position: absolute; inset: 0; opacity: 0; appearance: none; -webkit-appearance: none;
+      border: 0; margin: 0; padding: 0; cursor: pointer; z-index: 2;
+    }
+
+    /* ── Carousel ── */
+    .carousel-wrap { position: relative; overflow: hidden; }
+    .carousel {
+      display: flex; gap: 12px; overflow-x: auto; overflow-y: hidden; padding: 16px;
+      scroll-snap-type: x mandatory; touch-action: pan-x; -webkit-overflow-scrolling: touch;
+    }
+    .carousel::-webkit-scrollbar { height: 8px; }
+    .carousel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+    .carousel::-webkit-scrollbar-track { background: transparent; }
+    .page {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-rows: repeat(var(--rows), var(--swatch-h));
+      grid-auto-flow: column;
+      grid-auto-columns: var(--swatch-w);
+      gap: var(--gap);
+      scroll-snap-align: start;
+    }
+
+    /* ── Swatches ── */
+    .swatch {
+      width: var(--swatch-w); height: var(--swatch-h); border-radius: 14px; position: relative;
+      border: 1px solid rgba(0,0,0,.08); box-shadow: 0 2px 8px rgba(0,0,0,.14);
+      display: flex; align-items: flex-end; overflow: hidden; cursor: pointer;
+      user-select: none;
+    }
+    .swatch .label { width: 100%; padding: 10px 12px; font-weight: 700; letter-spacing: .2px; }
+    .swatch .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .swatch .meta { font-size: 11px; font-weight: 500; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; border: 1px solid rgba(0,0,0,.1);
+    }
+    .badge.stock {
+      position: absolute; top: 34px; left: 8px; padding: 3px 8px; border-radius: 6px;
+      background: rgba(255,255,255,.88); color: #1a202c; border: 1px solid rgba(0,0,0,.12);
+      backdrop-filter: blur(2px);
+    }
+    .badge.out {
+      background: rgba(0,0,0,.35) !important; color: #fff !important;
+      border-color: rgba(255,255,255,.25) !important;
+    }
+    .hexpill {
+      position: absolute; top: 8px; left: 8px;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-size: 11px; padding: 3px 7px; border-radius: 6px;
+      background: rgba(0,0,0,.28); color: inherit; border: 1px solid rgba(0,0,0,.12);
+      backdrop-filter: blur(2px);
+    }
+    .navbtn {
+      position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+      background: var(--surface); color: var(--text); border: 1px solid var(--border);
+      border-radius: 999px; width: 36px; height: 36px;
+      display: grid; place-items: center; cursor: pointer;
+      box-shadow: var(--shadow); font-size: 15px;
+    }
+    .navbtn:hover { background: var(--bg); }
+    .navbtn.left  { left: 6px; }
+    .navbtn.right { right: 6px; }
+    .empty-state { text-align: center; padding: 32px 16px; color: var(--text-muted); font-size: 14px; }
+
+    /* ── Brand autocomplete ── */
+    .ac-list {
+      position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: 0 8px 24px rgba(0,0,0,.12); max-height: 220px; overflow-y: auto;
+      z-index: 50; display: none;
+    }
+    .ac-item { padding: 9px 12px; cursor: pointer; font-size: 13px; }
+    .ac-item:hover, .ac-item[aria-selected="true"] { background: var(--bg); }
+    .ac-empty { padding: 9px 12px; color: var(--text-muted); font-size: 13px; }
+
+    /* ── Modals ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.4);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+    }
+    .modal {
+      background: var(--surface); border-radius: 10px;
+      width: 580px; max-width: 95vw; max-height: 90vh;
+      display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+    .modal-sm { width: 420px; }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .modal-header h2 { font-size: 16px; font-weight: 700; }
+    .modal-close {
+      background: none; border: none; font-size: 18px; cursor: pointer;
+      color: var(--text-muted); padding: 2px 6px; border-radius: 4px; line-height: 1;
+    }
+    .modal-close:hover { background: var(--bg); color: var(--text); }
+    .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+    .modal-footer {
+      padding: 12px 20px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 8px; flex-shrink: 0;
+    }
+    .form-group { margin-bottom: 14px; }
+    .form-group:last-child { margin-bottom: 0; }
+    .form-group label { display: block; margin-bottom: 5px; font-weight: 500; font-size: 13px; }
+    .form-group input[type="range"] { width: 100%; cursor: pointer; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+    /* ── Context menu ── */
+    .ctx-menu {
+      position: fixed; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: 0 4px 20px rgba(0,0,0,.15);
+      padding: 4px 0; min-width: 150px; z-index: 300;
+    }
+    .ctx-item {
+      display: flex; align-items: center; gap: 8px;
+      width: 100%; padding: 8px 14px; text-align: left;
+      background: none; border: none; cursor: pointer;
+      font-size: 13px; font-family: inherit; color: var(--text);
+    }
+    .ctx-item:hover { background: var(--bg); }
+    .ctx-item.danger { color: var(--danger); }
+    .ctx-item.danger:hover { background: rgba(229,62,62,.1); }
+
+    @media (max-width: 720px) {
+      .filters-grid { grid-template-columns: repeat(2, 1fr); }
+      .col-4 { grid-column: span 6; }
+      .col-3 { grid-column: span 6; }
+      .col-2 { grid-column: span 4; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="app-title">Filament Manager</span>
+    </div>
+    <div class="topbar-right">
+      <span class="count-chip" id="countChip">0 items</span>
+      <button class="btn btn-secondary" id="settingsBtn">⚙ Settings</button>
+      <button class="btn btn-primary"   id="newBtn">+ Add Filament</button>
+      <a href="/logout" class="btn btn-secondary">Sign out</a>
+    </div>
+  </header>
+
+  <main class="page-content">
+
+    <!-- Search / Filters -->
+    <div class="card" id="filterPanel">
+      <div class="card-header">Search</div>
+      <div class="card-body">
+        <div class="filters-grid">
+          <div class="form-field">
+            <label for="q">Search</label>
+            <input id="q" type="text" placeholder="Brand, type, color…" />
+          </div>
+          <div class="form-field">
+            <label for="typeFilter">Type</label>
+            <select id="typeFilter">
+              <option value="">Any</option>
+              <option>PLA</option><option>PETG</option><option>ABS</option>
+              <option>ASA</option><option>TPU</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="stockFilter">In stock</label>
+            <select id="stockFilter">
+              <option value="">Any</option>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="variantFilter">Variant</label>
+            <select id="variantFilter"></select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Swatches -->
+    <div class="card">
+      <div class="card-header">Swatches</div>
+      <div class="card-body" style="padding:0">
+        <div class="carousel-wrap">
+          <button class="navbtn left"  id="prevBtn" title="Previous">‹</button>
+          <button class="navbtn right" id="nextBtn"  title="Next">›</button>
+          <div class="carousel" id="carousel"></div>
+        </div>
+        <div id="emptyMsg" class="empty-state" hidden>
+          Nothing here yet. Click <b>+ Add Filament</b> to get started.
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ==================== Add / Edit Modal ==================== -->
+  <div class="modal-overlay" id="formPanel" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="formTitle">Add Filament</h2>
+        <button class="modal-close" id="formClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <form class="form-grid" id="filamentForm">
+          <input type="hidden" id="fid" />
+
+          <div class="form-field col-4">
+            <label for="brand">Brand</label>
+            <div style="position:relative">
+              <input id="brand" autocomplete="off" required />
+              <div id="brandAC" class="ac-list" role="listbox" aria-label="Brand suggestions"></div>
+            </div>
+          </div>
+          <div class="form-field col-2">
+            <label for="type">Type</label>
+            <select id="type" required>
+              <option>PLA</option><option>PETG</option><option>ABS</option>
+              <option>ASA</option><option>TPU</option>
+            </select>
+          </div>
+          <div class="form-field col-3">
+            <label for="variant">Variant</label>
+            <select id="variant" required></select>
+          </div>
+          <div class="form-field col-4">
+            <label for="colorName">Color name</label>
+            <input id="colorName" required />
+          </div>
+          <div class="form-field col-2">
+            <label>In stock</label>
+            <label class="switch">
+              <input type="checkbox" id="inStock" />
+              <span class="switch-label" id="inStockLbl">Yes</span>
+            </label>
+          </div>
+
+          <div class="row">
+            <div class="color-row">
+              <div class="form-field col-3">
+                <label for="hex">Hex</label>
+                <input id="hex" placeholder="#rrggbb" />
+              </div>
+              <div class="form-field col-2">
+                <label for="r">R</label>
+                <input id="r" type="number" min="0" max="255" />
+              </div>
+              <div class="form-field col-2">
+                <label for="g">G</label>
+                <input id="g" type="number" min="0" max="255" />
+              </div>
+              <div class="form-field col-2">
+                <label for="b">B</label>
+                <input id="b" type="number" min="0" max="255" />
+              </div>
+              <div class="form-field col-3">
+                <label for="picker">Color</label>
+                <div class="color-badge-wrap">
+                  <button type="button" id="preview" class="color-badge" tabindex="-1">—</button>
+                  <input id="picker" type="color" aria-label="Choose color" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+        <button type="submit" form="filamentForm" class="btn btn-primary" id="saveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Settings Modal ==================== -->
+  <div class="modal-overlay" id="settingsModal" style="display:none">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button class="modal-close" id="closeSettings">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="themeSelect">Theme</label>
+          <select id="themeSelect" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;color:var(--text);background:var(--surface);font-family:inherit">
+            <option value="system">System (auto)</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+        <hr class="divider">
+        <div class="form-group">
+          <label for="rowsInput">Rows in carousel</label>
+          <input id="rowsInput" type="range" min="1" max="4" step="1" />
+          <small id="rowsHint" style="color:var(--text-muted);font-size:12px;display:block;margin-top:4px"></small>
+        </div>
+        <hr class="divider">
+        <div class="form-group">
+          <label>Data</label>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button type="button" id="exportBtn" class="btn btn-secondary">↓ Export JSON</button>
+            <button type="button" id="importBtn" class="btn btn-secondary">↑ Import JSON</button>
+            <input type="file" id="importFile" accept="application/json" style="display:none" />
+          </div>
+          <p style="font-size:12px;color:var(--text-muted);margin-top:6px">Import replaces all existing data.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelSettings">Cancel</button>
+        <button class="btn btn-primary"   id="saveSettings">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Context Menu ==================== -->
+  <div class="ctx-menu" id="swatchCtxMenu" style="display:none">
+    <button class="ctx-item" id="ctxEdit">✏️ Edit</button>
+    <button class="ctx-item danger" id="ctxDelete">🗑️ Delete</button>
+  </div>
+
+  <template id="swatchTpl">
+    <div class="swatch" role="button" title="Right-click to edit or delete">
+      <div class="badge stock"></div>
+      <div class="hexpill"></div>
+      <div class="label">
+        <div class="name"></div>
+        <div class="meta"></div>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+    // ===== API helper =====
+    async function api(method, path, body) {
+      const opts = { method, headers: {} };
+      if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(path, opts);
+      if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
+      if (res.status === 204) return null;
+      return res.json();
+    }
+
+    async function loadAndRender() {
+      items = await api('GET', '/api/filaments');
+      render();
+      refreshBrandDatalist();
+    }
+
+    // ===== Variants =====
+    const VARIANTS = ["Basic", "Mat", "Metal", "Glow", "Marble"];
+    const DEFAULT_COLOR = "#ffffff";
+
+    function populateVariantSelects(){
+      [$('#variant'), $('#variantFilter')].forEach(sel => {
+        if (!sel) return;
+        sel.innerHTML = '';
+        if (sel.id === 'variantFilter') {
+          const o = document.createElement('option'); o.value = ''; o.textContent = 'Any';
+          sel.appendChild(o);
+        }
+        VARIANTS.forEach(v => {
+          const o = document.createElement('option'); o.value = v; o.textContent = v;
+          sel.appendChild(o);
+        });
+      });
+    }
+    populateVariantSelects();
+
+    // ===== Utils =====
+    const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi);
+    function hexFromRgb({r,g,b}){ const h = v => v.toString(16).padStart(2,'0'); return '#'+h(r)+h(g)+h(b); }
+    function rgbFromHex(hex){
+      if (!hex) return null;
+      hex = hex.trim().replace(/^#/,'');
+      if (hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
+      if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
+      return { r: parseInt(hex.slice(0,2),16), g: parseInt(hex.slice(2,4),16), b: parseInt(hex.slice(4,6),16) };
+    }
+    function bestTextColor(rgb){
+      const lin = [rgb.r,rgb.g,rgb.b].map(v => { v/=255; return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4); });
+      const L = 0.2126*lin[0]+0.7152*lin[1]+0.0722*lin[2];
+      return (L+0.05)/0.05 >= 1.05/( L+0.05) ? '#000' : '#fff';
+    }
+
+    // ===== State =====
+    let items = [];
+    let editingId = null;
+    let pendingScrollToId = null;
+
+    // ===== Form elements =====
+    const formPanel  = $('#formPanel');
+    const formTitle  = $('#formTitle');
+    const fForm      = $('#filamentForm');
+    const fid        = $('#fid');
+    const brand      = $('#brand');
+    const brandAC    = $('#brandAC');
+    const colorName  = $('#colorName');
+    const type       = $('#type');
+    const variant    = $('#variant');
+    const inStock    = $('#inStock');
+    const inStockLbl = $('#inStockLbl');
+    const hex        = $('#hex');
+    const r          = $('#r');
+    const g          = $('#g');
+    const b          = $('#b');
+    const picker     = $('#picker');
+    const preview    = $('#preview');
+
+    // ===== Brand autocomplete =====
+    function sizeBrandAC(){ if (brandAC && brand) brandAC.style.minWidth = brand.offsetWidth+'px'; }
+    function openBrandAC(){ sizeBrandAC(); brandAC.style.display = 'block'; }
+    function closeBrandAC(){ brandAC.style.display = 'none'; brandAC.innerHTML = ''; brandAC.dataset.index = '-1'; }
+
+    function renderBrandAC(query){
+      const q = (query||'').trim().toLowerCase();
+      const list = uniqueBrands(items);
+      const filtered = q ? list.filter(b => b.toLowerCase().includes(q)) : list;
+      brandAC.innerHTML = '';
+      if (!filtered.length) {
+        const d = document.createElement('div'); d.className = 'ac-empty'; d.textContent = 'No matches';
+        brandAC.appendChild(d);
+      } else {
+        filtered.slice(0,20).forEach((name, idx) => {
+          const d = document.createElement('div');
+          d.className = 'ac-item'; d.role = 'option'; d.textContent = name; d.dataset.index = String(idx);
+          d.addEventListener('mousedown', e => { e.preventDefault(); brand.value = name; closeBrandAC(); });
+          brandAC.appendChild(d);
+        });
+      }
+      brandAC.dataset.index = '-1';
+    }
+
+    brand.addEventListener('focus', () => { renderBrandAC(brand.value); openBrandAC(); });
+    brand.addEventListener('input', () => { renderBrandAC(brand.value); openBrandAC(); });
+    brand.addEventListener('blur',  () => setTimeout(closeBrandAC, 120));
+    window.addEventListener('resize', sizeBrandAC);
+
+    brand.addEventListener('keydown', e => {
+      if (brandAC.style.display !== 'block') return;
+      const els = Array.from(brandAC.querySelectorAll('.ac-item'));
+      let idx = parseInt(brandAC.dataset.index||'-1',10);
+      if (e.key==='ArrowDown'){ idx=Math.min(idx+1,els.length-1); e.preventDefault(); }
+      else if (e.key==='ArrowUp'){ idx=Math.max(idx-1,0); e.preventDefault(); }
+      else if (e.key==='Enter'){ if(idx>=0&&els[idx]){ brand.value=els[idx].textContent; closeBrandAC(); e.preventDefault(); } return; }
+      else if (e.key==='Escape'){ closeBrandAC(); return; }
+      els.forEach((el,i)=>el.setAttribute('aria-selected',String(i===idx)));
+      brandAC.dataset.index = String(idx);
+      if (idx>=0&&els[idx]) els[idx].scrollIntoView({block:'nearest'});
+    });
+
+    // ===== Color sync =====
+    function setPreview(rgb){
+      if (!rgb){ preview.textContent='—'; preview.style.background=''; preview.style.color=''; return; }
+      preview.style.background = hexFromRgb(rgb);
+      preview.style.color = bestTextColor(rgb);
+      preview.textContent = `${rgb.r}, ${rgb.g}, ${rgb.b}`;
+    }
+    function syncFromHex(){ const rgb=rgbFromHex(hex.value); if(!rgb)return; r.value=rgb.r; g.value=rgb.g; b.value=rgb.b; picker.value=hexFromRgb(rgb); setPreview(rgb); }
+    function syncFromRGB(){ const rgb={r:clamp(parseInt(r.value||0),0,255),g:clamp(parseInt(g.value||0),0,255),b:clamp(parseInt(b.value||0),0,255)}; hex.value=hexFromRgb(rgb); picker.value=hex.value; setPreview(rgb); }
+    function syncFromPicker(){ hex.value=picker.value; syncFromHex(); }
+
+    picker.addEventListener('input', syncFromPicker);
+    hex.addEventListener('input', syncFromHex);
+    hex.addEventListener('change', syncFromHex);
+    r.addEventListener('input', syncFromRGB);
+    g.addEventListener('input', syncFromRGB);
+    b.addEventListener('input', syncFromRGB);
+    inStock.addEventListener('change', ()=>{ inStockLbl.textContent = inStock.checked?'Yes':'No'; });
+
+    // ===== Open / close form modal =====
+    function openForm(editId=null){
+      editingId = editId;
+      formTitle.textContent = editId ? 'Edit Filament' : 'Add Filament';
+      formPanel.style.display = 'flex';
+      if (editId) {
+        const it = items.find(x=>x.id===editId); if(!it) return;
+        fid.value=it.id; brand.value=it.brand; colorName.value=it.colorName;
+        type.value=it.type; variant.value=it.variant||'Basic';
+        inStock.checked=!!it.inStock; inStockLbl.textContent=inStock.checked?'Yes':'No';
+        const rgb=it.colorRGB; r.value=rgb.r; g.value=rgb.g; b.value=rgb.b;
+        hex.value=it.colorHex; picker.value=it.colorHex; setPreview(rgb);
+      } else {
+        fid.value=''; brand.value=''; colorName.value=''; type.value='PLA'; variant.value='Basic';
+        inStock.checked=true; inStockLbl.textContent='Yes';
+        hex.value=DEFAULT_COLOR; picker.value=DEFAULT_COLOR;
+        const rgb=rgbFromHex(DEFAULT_COLOR); r.value=rgb.r; g.value=rgb.g; b.value=rgb.b; setPreview(rgb);
+      }
+      brand.focus();
+    }
+    function closeForm(){ formPanel.style.display='none'; fForm.reset(); setPreview(null); }
+
+    $('#newBtn').addEventListener('click', ()=> openForm());
+    $('#cancelBtn').addEventListener('click', closeForm);
+    $('#formClose').addEventListener('click', closeForm);
+    formPanel.addEventListener('click', e=>{ if(e.target===formPanel) closeForm(); });
+
+    // ===== Duplicate check =====
+    function sameRGB(a,b){ return a&&b&&a.r===b.r&&a.g===b.g&&a.b===b.b; }
+    function isDuplicateCandidate(candidate, excludeId){
+      const bk=(candidate.brand||'').trim().toLowerCase();
+      const tk=(candidate.type||'').trim().toUpperCase();
+      const vk=(candidate.variant||'Basic').trim().toLowerCase();
+      return (items||[]).some(x=>{
+        if(x.id===excludeId) return false;
+        return (x.brand||'').trim().toLowerCase()===bk &&
+               (x.type||'').trim().toUpperCase()===tk &&
+               (x.variant||'Basic').trim().toLowerCase()===vk &&
+               sameRGB(x.colorRGB,candidate.colorRGB);
+      });
+    }
+
+    // ===== Form submit =====
+    fForm.addEventListener('submit', async e=>{
+      e.preventDefault();
+      const rgb = rgbFromHex(hex.value) || {
+        r:clamp(+r.value,0,255), g:clamp(+g.value,0,255), b:clamp(+b.value,0,255)
+      };
+      const normalizedBrand = normalizeBrand(brand.value);
+      const candidate = {
+        brand: normalizedBrand,
+        colorName: colorName.value.trim(),
+        type: type.value.trim().toUpperCase(),
+        variant: (variant.value||'Basic').trim(),
+        inStock: !!inStock.checked,
+        colorR: rgb.r, colorG: rgb.g, colorB: rgb.b,
+        colorHex: hexFromRgb(rgb),
+        colorRGB: rgb,
+      };
+      if (isDuplicateCandidate(candidate, editingId)){
+        alert('This filament already exists with the same brand, type, variant and color.');
+        return;
+      }
+      try {
+        if (editingId){
+          const updated = await api('PUT', `/api/filaments/${editingId}`, candidate);
+          items = items.map(x=>x.id===editingId?updated:x);
+          pendingScrollToId = updated.id;
+        } else {
+          const created = await api('POST', '/api/filaments', candidate);
+          items.push(created);
+          pendingScrollToId = created.id;
+        }
+        closeForm();
+        render();
+      } catch(err){ alert('Save failed: '+err.message); }
+    });
+
+    // ===== Brand helpers =====
+    function uniqueBrands(list){
+      const seen = new Map();
+      for (const it of list){
+        const raw=(it.brand||'').trim(); if(!raw) continue;
+        const key=raw.toLowerCase(); if(!seen.has(key)) seen.set(key,raw);
+      }
+      return Array.from(seen.values()).sort();
+    }
+    function normalizeBrand(input){
+      const key=(input||'').trim().toLowerCase(); if(!key) return '';
+      for (const b of uniqueBrands(items)) if(b.toLowerCase()===key) return b;
+      return (input||'').trim();
+    }
+    function refreshBrandDatalist(){
+      const dl = document.getElementById('brandList'); if(!dl) return;
+      const brands = uniqueBrands(items||[]);
+      dl.innerHTML = '';
+      brands.forEach(name=>{ const o=document.createElement('option'); o.value=name; dl.appendChild(o); });
+    }
+
+    // ===== Filters =====
+    const q             = $('#q');
+    const typeFilter    = $('#typeFilter');
+    const stockFilter   = $('#stockFilter');
+    const variantFilter = $('#variantFilter');
+    ;[q,typeFilter,stockFilter,variantFilter].forEach(el=>el&&el.addEventListener('input',render));
+
+    function applyFilters(list){
+      const query=(q?.value||'').trim().toLowerCase();
+      const t=(typeFilter?.value||'').trim().toLowerCase();
+      const s=stockFilter?.value??'';
+      const v=(variantFilter?.value||'').trim().toLowerCase();
+      return list.filter(it=>{
+        if(query){ const hay=`${it.brand} ${it.type} ${it.colorName} ${it.variant||''}`.toLowerCase(); if(!hay.includes(query)) return false; }
+        if(t && it.type.toLowerCase()!==t) return false;
+        if(v && (it.variant||'').toLowerCase()!==v) return false;
+        if(s!=='' && String(!!it.inStock)!==s) return false;
+        return true;
+      });
+    }
+
+    // ===== Sort by hue =====
+    function sortLightToDark(list){
+      function toHsl({r,g,b}){
+        r/=255; g/=255; b/=255;
+        const max=Math.max(r,g,b),min=Math.min(r,g,b);
+        let h=0,s=0; const l=(max+min)/2,d=max-min;
+        if(d!==0){
+          s=d/(1-Math.abs(2*l-1));
+          switch(max){case r:h=((g-b)/d)%6;break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;break;}
+          h*=60; if(h<0)h+=360;
+        }
+        return {h,s,l};
+      }
+      function sector(h){
+        if(h>=40&&h<80)return 0; if(h>=80&&h<160)return 1; if(h>=160&&h<200)return 2;
+        if(h>=200&&h<260)return 3; if(h>=260&&h<300)return 4; if(h>=300&&h<340)return 5;
+        if(h>=340)return 6; return 7;
+      }
+      function key(it){
+        const {h,s,l}=toHsl(it.colorRGB);
+        if(s<=0.12) return l<=0.14?[2,l]:[0,-l];
+        return [1,sector(h),-l];
+      }
+      return [...list].sort((a,b)=>{
+        const ka=key(a),kb=key(b);
+        for(let i=0;i<ka.length;i++){ if(ka[i]<kb[i])return -1; if(ka[i]>kb[i])return 1; }
+        return 0;
+      });
+    }
+
+    // ===== Carousel =====
+    const carousel = $('#carousel');
+    const emptyMsg  = $('#emptyMsg');
+    const tpl       = $('#swatchTpl');
+
+    function computeColumns(){
+      const sw=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--swatch-w'))||240;
+      return Math.max(1,Math.floor((carousel.clientWidth-32+12)/(sw+12)));
+    }
+    function paginate(list,rows,cols){
+      const pp=rows*cols,pages=[];
+      for(let i=0;i<list.length;i+=pp) pages.push(list.slice(i,i+pp));
+      return pages;
+    }
+
+    function render(){
+      $('#countChip').textContent = `${items.length} item${items.length===1?'':'s'}`;
+      const ordered = sortLightToDark(applyFilters(items));
+      carousel.innerHTML = '';
+      emptyMsg.hidden = ordered.length > 0;
+      if (!ordered.length) return;
+
+      const rows = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rows'))||2;
+      const pages = paginate(ordered, rows, computeColumns());
+
+      for (let p=0; p<pages.length; p++){
+        const pageEl = document.createElement('div');
+        pageEl.className = 'page';
+        pageEl.style.gridTemplateRows = `repeat(${rows},var(--swatch-h))`;
+        pageEl.style.gridAutoColumns  = 'var(--swatch-w)';
+        pageEl.dataset.page = String(p);
+
+        for (const it of pages[p]){
+          const node = tpl.content.firstElementChild.cloneNode(true);
+          node.dataset.id = it.id;
+          node.style.background = it.colorHex;
+          node.style.color = bestTextColor(it.colorRGB);
+
+          node.querySelector('.name').textContent = it.brand;
+          node.querySelector('.meta').textContent = `${it.type} (${it.variant||'Basic'}) — ${it.colorName}`;
+
+          const badge = node.querySelector('.badge.stock');
+          badge.className = 'badge stock '+(it.inStock?'in':'out');
+          badge.textContent = it.inStock ? 'In stock' : 'Out';
+
+          const hexEl = node.querySelector('.hexpill');
+          if (hexEl) hexEl.textContent = (it.colorHex||'#000000').toUpperCase();
+
+          // Left-click → copy HEX
+          node.addEventListener('click', ()=>{
+            const val = (it.colorHex||'').startsWith('#') ? it.colorHex : '#'+String(it.colorHex||'').replace(/^#/,'');
+            navigator.clipboard?.writeText(val).then(()=>{
+              if(hexEl){ const old=hexEl.textContent; hexEl.textContent='Copied!'; setTimeout(()=>hexEl.textContent=old,900); }
+            }).catch(()=>{});
+          });
+
+          // Right-click → context menu
+          node.addEventListener('contextmenu', e=>{ e.preventDefault(); showCtxMenu(e.clientX, e.clientY, it.id); });
+
+          pageEl.appendChild(node);
+        }
+        carousel.appendChild(pageEl);
+      }
+
+      if (pendingScrollToId){
+        const el = carousel.querySelector(`[data-id="${pendingScrollToId}"]`);
+        if (el){
+          const page = el.closest('.page');
+          if (page) carousel.scrollTo({left:page.offsetLeft,behavior:'smooth'});
+          el.animate([{transform:'scale(1)'},{transform:'scale(1.04)'},{transform:'scale(1)'}],{duration:500,easing:'ease'});
+        }
+        pendingScrollToId = null;
+      }
+
+      refreshBrandDatalist();
+    }
+
+    // Nav buttons
+    $('#prevBtn').addEventListener('click', ()=>{
+      const pages=$$('.page'),left=carousel.scrollLeft;
+      let target=0;
+      for(const p of pages){ if(p.offsetLeft<left-4) target=p.offsetLeft; else break; }
+      carousel.scrollTo({left:target,behavior:'smooth'});
+    });
+    $('#nextBtn').addEventListener('click', ()=>{
+      const pages=$$('.page'),left=carousel.scrollLeft+4;
+      let target=left;
+      for(const p of pages){ if(p.offsetLeft>left){target=p.offsetLeft;break;} }
+      carousel.scrollTo({left:target,behavior:'smooth'});
+    });
+    window.addEventListener('resize', render);
+
+    // ===== Context menu =====
+    const ctxMenu = $('#swatchCtxMenu');
+    let ctxTargetId = null;
+
+    function showCtxMenu(x, y, id){
+      ctxTargetId = id;
+      ctxMenu.style.left = '0'; ctxMenu.style.top = '0'; ctxMenu.style.display = 'block';
+      const mw=ctxMenu.offsetWidth, mh=ctxMenu.offsetHeight;
+      ctxMenu.style.left = Math.min(x, window.innerWidth  - mw - 8)+'px';
+      ctxMenu.style.top  = Math.min(y, window.innerHeight - mh - 8)+'px';
+    }
+    function hideCtxMenu(){ ctxMenu.style.display='none'; ctxTargetId=null; }
+
+    document.addEventListener('click', hideCtxMenu);
+    document.addEventListener('keydown', e=>{ if(e.key==='Escape') hideCtxMenu(); });
+
+    $('#ctxEdit').addEventListener('click', e=>{
+      e.stopPropagation(); const id=ctxTargetId; hideCtxMenu(); if(id!=null) openForm(id);
+    });
+    $('#ctxDelete').addEventListener('click', async e=>{
+      e.stopPropagation(); const id=ctxTargetId; hideCtxMenu();
+      if(id==null) return;
+      if(confirm('Delete this filament?')){
+        try {
+          await api('DELETE', `/api/filaments/${id}`);
+          items = items.filter(x=>x.id!==id);
+          render();
+        } catch(err){ alert('Delete failed: '+err.message); }
+      }
+    });
+
+    // ===== Import / Export =====
+    $('#exportBtn').addEventListener('click', ()=>{ const a=document.createElement('a'); a.href='/api/export'; a.click(); });
+    $('#importBtn').addEventListener('click', ()=>$('#importFile').click());
+    $('#importFile').addEventListener('change', e=>{
+      const file=e.target.files[0]; if(!file) return;
+      const reader=new FileReader();
+      reader.onload = async ()=>{
+        try {
+          const data=JSON.parse(reader.result);
+          if(!Array.isArray(data)) throw new Error('Invalid JSON format');
+          await api('POST','/api/import',data);
+          await loadAndRender();
+        } catch(err){ alert('Import failed: '+err.message); }
+      };
+      reader.readAsText(file);
+    });
+
+    // ===== Theme =====
+    function applyTheme(mode) {
+      if (mode === 'dark')       document.documentElement.setAttribute('data-theme', 'dark');
+      else if (mode === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      else                       document.documentElement.removeAttribute('data-theme');
+    }
+
+    // ===== Settings Modal =====
+    const settingsModal  = $('#settingsModal');
+    const rowsInput      = $('#rowsInput');
+    const rowsHint       = $('#rowsHint');
+    const themeSelect    = $('#themeSelect');
+
+    async function openSettings(){
+      const rows=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rows'))||2;
+      rowsInput.value=rows; rowsHint.textContent=`${rows} row${rows>1?'s':''}`;
+      const themeSetting = await api('GET','/api/settings/theme').catch(()=>null);
+      if (themeSelect) themeSelect.value = themeSetting?.value ?? 'system';
+      settingsModal.style.display='flex';
+    }
+    function closeSettingsModal(){ settingsModal.style.display='none'; }
+
+    rowsInput.addEventListener('input', ()=>{ rowsHint.textContent=`${rowsInput.value} row${rowsInput.value>1?'s':''}`; });
+    $('#settingsBtn').addEventListener('click', openSettings);
+    $('#closeSettings').addEventListener('click', closeSettingsModal);
+    $('#cancelSettings').addEventListener('click', closeSettingsModal);
+    settingsModal.addEventListener('click', e=>{ if(e.target===settingsModal) closeSettingsModal(); });
+
+    $('#saveSettings').addEventListener('click', async ()=>{
+      const themeVal = themeSelect?.value ?? 'system';
+      applyTheme(themeVal);
+      try { await api('PUT','/api/settings/theme',{value:themeVal}); } catch{}
+
+      const rows=parseInt(rowsInput.value,10)||2;
+      document.documentElement.style.setProperty('--rows',rows);
+      try { await api('PUT','/api/settings/rows',{value:rows}); } catch{}
+      closeSettingsModal();
+      render();
+    });
+
+    // ===== Init =====
+    (async ()=>{
+      const [themeSetting, rowSetting] = await Promise.all([
+        api('GET','/api/settings/theme').catch(()=>null),
+        api('GET','/api/settings/rows').catch(()=>null),
+      ]);
+      applyTheme(themeSetting?.value ?? 'system');
+      document.documentElement.style.setProperty('--rows', rowSetting?.value??2);
+      await loadAndRender();
+    })();
+  </script>
+</body>
+</html>

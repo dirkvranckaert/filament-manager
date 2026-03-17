@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Background -->
+  <rect width="64" height="64" rx="14" fill="#0f172a"/>
+
+  <!-- Filament spool outer ring -->
+  <circle cx="32" cy="32" r="22" fill="none" stroke="#334155" stroke-width="6"/>
+
+  <!-- Spool hub -->
+  <circle cx="32" cy="32" r="10" fill="#334155"/>
+  <circle cx="32" cy="32" r="5" fill="#1e293b"/>
+
+  <!-- Filament strand unwinding (arc) -->
+  <path d="M 32 10 A 22 22 0 0 1 54 32" fill="none" stroke="#4f8cff" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Filament color dot (the swatch) -->
+  <circle cx="54" cy="32" r="5" fill="#4f8cff"/>
+  <circle cx="54" cy="32" r="2.5" fill="#93c5fd"/>
+</svg>
