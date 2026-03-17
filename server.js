@@ -39,6 +39,27 @@ app.get('/logout', (req, res) => {
   res.redirect('/login');
 });
 
+// --- Public routes (no auth required) ---
+app.get('/swatches', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'swatches.html'));
+});
+
+app.get('/api/public/filaments', (req, res) => {
+  const enabledRow = db.prepare('SELECT value FROM settings WHERE key=?').get('publicViewEnabled');
+  let enabled = false;
+  try { enabled = JSON.parse(enabledRow?.value); } catch {}
+  if (!enabled) return res.status(403).json({ error: 'Public view disabled' });
+
+  const stockRow = db.prepare('SELECT value FROM settings WHERE key=?').get('publicViewInStockOnly');
+  let inStockOnly = false;
+  try { inStockOnly = JSON.parse(stockRow?.value); } catch {}
+
+  const rows = inStockOnly
+    ? db.prepare('SELECT * FROM filaments WHERE inStock=1').all()
+    : db.prepare('SELECT * FROM filaments').all();
+  res.json(rows.map(toClient));
+});
+
 // --- Session auth middleware ---
 app.use((req, res, next) => {
   if (req.path === '/favicon.svg') return next();

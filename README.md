@@ -17,6 +17,7 @@ Built with Node.js + Express + SQLite. Protected by session-based cookie auth.
 - Session-based login page (no browser credential dialog)
 - Sign out link
 - Duplicate detection (same brand + type + variant + color)
+- Optional public swatch view (`/swatches`) — shareable read-only page, no login required, configurable to show all or in-stock-only filaments
 
 ---
 
@@ -48,6 +49,7 @@ filament-manager/
 └── public/
     ├── index.html        ← All UI + frontend logic (single file)
     ├── login.html        ← Login page (served unauthenticated)
+    ├── swatches.html     ← Public read-only swatch viewer (served unauthenticated)
     └── favicon.svg
 ```
 
@@ -127,7 +129,14 @@ pm2 restart filament-manager
 
 ## REST API
 
-All endpoints (except `GET /login`, `POST /login`, `GET /logout`, and `GET /favicon.svg`) require a valid session cookie. Payloads and responses are JSON.
+All endpoints require a valid session cookie **except** the ones listed in the Public and Auth sections below. Payloads and responses are JSON.
+
+### Public (no auth required)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/swatches` | Serve the public read-only swatch page |
+| GET | `/api/public/filaments` | List filaments for the public view — returns `403` if public view is disabled; respects the in-stock-only setting |
 
 ### Auth
 
@@ -163,6 +172,8 @@ Known keys:
 |-----|------|-------------|
 | `rows` | integer | Carousel row count (1–4) |
 | `theme` | string | `system` / `light` / `dark` |
+| `publicViewEnabled` | boolean | Enable the unauthenticated `/swatches` page and `/api/public/filaments` endpoint |
+| `publicViewInStockOnly` | boolean | When public view is enabled, only return filaments with `inStock = true` |
 
 ### Export / Import
 
@@ -228,5 +239,6 @@ server {
 
 - **No build step.** Edit `public/index.html` and reload the browser. All UI and JS is in a single file.
 - **Auth.** On login, the server generates a 32-byte random token, stores it in an in-memory `Set`, and sets an `HttpOnly` cookie (`fm_session`). Sessions are lost on server restart — users are redirected to login again.
+- **Public swatch view.** `/swatches` and `/api/public/filaments` are registered before the auth middleware and are always accessible without a session. The API endpoint checks the `publicViewEnabled` setting and returns `403` if it is false or unset. When `publicViewInStockOnly` is true, only filaments with `inStock = 1` are returned. The public page applies dark mode via `@media (prefers-color-scheme: dark)` only — it cannot load the saved theme preference without authentication.
 - **Theme.** The `theme` setting is loaded at startup and applied as a `data-theme` attribute on `<html>`. `system` removes the attribute (letting the OS `prefers-color-scheme` media query take effect), `light`/`dark` set it explicitly.
 - **Settings storage.** Values are `JSON.stringify`-ed on write and `JSON.parse`-d on read in `server.js`.
