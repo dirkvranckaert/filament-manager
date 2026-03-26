@@ -27,7 +27,14 @@ db.exec(`
   );
 `);
 
-// Migration: add patternImage column if not already present
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sessions (
+    token     TEXT PRIMARY KEY,
+    expiresAt INTEGER NOT NULL
+  );
+`);
+
+// Migrations
 try { db.exec('ALTER TABLE filaments ADD COLUMN patternImage TEXT'); } catch {}
 
 module.exports = db;

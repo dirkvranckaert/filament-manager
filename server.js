@@ -28,12 +28,19 @@ const uploadPattern = multer({
 const uploadZip = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 // --- Session store ---
-const sessions = new Set();
+const SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
 
 function parseCookieToken(req) {
   const raw = req.headers.cookie ?? '';
   const match = raw.match(/(?:^|;\s*)fm_session=([^;]+)/);
   return match ? match[1] : null;
+}
+
+function isValidSession(token) {
+  const row = db.prepare('SELECT expiresAt FROM sessions WHERE token=?').get(token);
+  if (!row) return false;
+  if (Date.now() > row.expiresAt) { db.prepare('DELETE FROM sessions WHERE token=?').run(token); return false; }
+  return true;
 }
 
 // --- Auth routes (bypass middleware) ---
@@ -45,8 +52,8 @@ app.post('/login', (req, res) => {
   const { username, password } = req.body ?? {};
   if (username === process.env.ADMIN_USER && password === process.env.ADMIN_PASS) {
     const token = crypto.randomBytes(32).toString('hex');
-    sessions.add(token);
-    res.setHeader('Set-Cookie', `fm_session=${token}; HttpOnly; Path=/`);
+    db.prepare('INSERT INTO sessions (token, expiresAt) VALUES (?,?)').run(token, Date.now() + SESSION_TTL);
+    res.setHeader('Set-Cookie', `fm_session=${token}; HttpOnly; Path=/; Max-Age=604800`);
     return res.json({ ok: true });
   }
   res.status(401).json({ ok: false });
@@ -54,7 +61,7 @@ app.post('/login', (req, res) => {
 
 app.get('/logout', (req, res) => {
   const token = parseCookieToken(req);
-  if (token) sessions.delete(token);
+  if (token) db.prepare('DELETE FROM sessions WHERE token=?').run(token);
   res.setHeader('Set-Cookie', 'fm_session=; HttpOnly; Path=/; Max-Age=0');
   res.redirect('/login');
 });
@@ -94,7 +101,7 @@ app.use('/uploads', express.static(uploadsDir));
 app.use((req, res, next) => {
   if (req.path === '/favicon.svg') return next();
   const token = parseCookieToken(req);
-  if (token && sessions.has(token)) return next();
+  if (token && isValidSession(token)) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
   res.redirect('/login');
 });
