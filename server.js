@@ -6,6 +6,7 @@ const fs      = require('fs');
 const multer  = require('multer');
 const AdmZip  = require('adm-zip');
 const db = require('./db');
+const sharedAuth = require('./shared-auth');
 
 const app = express();
 app.use(express.json());
@@ -53,7 +54,10 @@ app.post('/login', (req, res) => {
   if (username === process.env.ADMIN_USER && password === process.env.ADMIN_PASS) {
     const token = crypto.randomBytes(32).toString('hex');
     db.prepare('INSERT INTO sessions (token, expiresAt) VALUES (?,?)').run(token, Date.now() + SESSION_TTL);
-    res.setHeader('Set-Cookie', `fm_session=${token}; HttpOnly; Path=/; Max-Age=604800`);
+    const cookies = [`fm_session=${token}; HttpOnly; Path=/; Max-Age=604800`];
+    const sharedCookie = sharedAuth.createSharedCookie(username);
+    if (sharedCookie) cookies.push(sharedCookie);
+    res.setHeader('Set-Cookie', cookies);
     return res.json({ ok: true });
   }
   res.status(401).json({ ok: false });
@@ -62,7 +66,10 @@ app.post('/login', (req, res) => {
 app.get('/logout', (req, res) => {
   const token = parseCookieToken(req);
   if (token) db.prepare('DELETE FROM sessions WHERE token=?').run(token);
-  res.setHeader('Set-Cookie', 'fm_session=; HttpOnly; Path=/; Max-Age=0');
+  const cookies = ['fm_session=; HttpOnly; Path=/; Max-Age=0'];
+  const clearShared = sharedAuth.clearSharedCookie();
+  if (clearShared) cookies.push(clearShared);
+  res.setHeader('Set-Cookie', cookies);
   res.redirect('/login');
 });
 
@@ -99,9 +106,10 @@ app.use('/uploads', express.static(uploadsDir));
 
 // --- Session auth middleware ---
 app.use((req, res, next) => {
-  if (req.path === '/favicon.svg') return next();
+  if (['/favicon.svg', '/manifest.json', '/sw.js', '/api/config'].includes(req.path)) return next();
   const token = parseCookieToken(req);
   if (token && isValidSession(token)) return next();
+  if (sharedAuth.validateSharedToken(req)) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
   res.redirect('/login');
 });
@@ -277,6 +285,25 @@ function toClient(row) {
 function rgbToHex(r, g, b) {
   return '#' + [r, g, b].map(v => Number(v).toString(16).padStart(2, '0')).join('');
 }
+
+// --- Config & discovery ---
+app.get('/api/config', (_req, res) => {
+  res.json({
+    version: require('./package.json').version,
+    appName: 'Filament Manager',
+    appId: 'filament-manager',
+    sharedAuth: sharedAuth.isEnabled(),
+  });
+});
+
+app.get('/api/discover', async (_req, res) => {
+  const apps = {};
+  const plannerUrl = process.env.PLANNER_URL || '';
+  const calcUrl = process.env.CALCULATOR_URL || '';
+  if (plannerUrl) apps.planner = await sharedAuth.discoverApp(plannerUrl);
+  if (calcUrl) apps.calculator = await sharedAuth.discoverApp(calcUrl);
+  res.json({ sharedAuth: sharedAuth.isEnabled(), apps });
+});
 
 app.listen(process.env.PORT || 3002, () => {
   console.log(`Filament Manager running on port ${process.env.PORT || 3002}`);
