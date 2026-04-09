@@ -1092,18 +1092,28 @@
       try {
         const data = await api('GET', '/api/discover');
         const config = await api('GET', '/api/config');
+        let html = '';
         if (!config.sharedAuth) {
-          el.innerHTML = '<span>Shared auth not configured. Set <code>SHARED_AUTH_SECRET</code> in .env.</span>';
-          return;
+          html = '<div style="padding:12px;background:#fffbeb;border:1px solid #d97706;border-radius:6px;margin-bottom:12px"><strong>Shared auth not configured</strong><p style="font-size:13px;color:var(--text-muted);margin-top:4px">Set <code>SHARED_AUTH_SECRET</code> in .env.</p></div>';
+        } else {
+          html = '<div style="padding:8px 12px;background:#f0fdf4;border:1px solid #16a34a;border-radius:6px;margin-bottom:12px;font-size:13px">Shared authentication is <strong>enabled</strong></div>';
         }
-        const appNames = { planner: 'PrintFarm Planner', calculator: '3D Project Calculator' };
+        const appIcons = { planner: '\ud83d\udcc5', calculator: '\ud83e\uddee', filament: '\ud83e\uddf5' };
+        const fallbackNames = { planner: 'PrintFarm Planner', calculator: '3D Project Calculator' };
         const keys = Object.keys(data.apps || {});
-        if (!keys.length) { el.innerHTML = '<span>No sibling app URLs configured.</span>'; return; }
-        el.innerHTML = keys.map(k => {
-          const a = data.apps[k];
-          const dot = a.available ? '\ud83d\udfe2' : '\ud83d\udd34';
-          return `<div style="padding:4px 0">${dot} <strong>${appNames[k]||k}</strong> \u2014 ${a.available ? 'v'+(a.version||'?') : 'Unreachable'}</div>`;
-        }).join('');
+        if (!keys.length) { html += '<p style="color:var(--text-muted)">No sibling app URLs configured.</p>'; }
+        else {
+          for (const k of keys) {
+            const a = data.apps[k];
+            const dot = a.available ? '\ud83d\udfe2' : '\ud83d\udd34';
+            const icon = appIcons[k] || '\ud83d\udce6';
+            const name = a.appName || fallbackNames[k] || k;
+            const info = a.available ? 'v'+(a.version||'?') : 'Unreachable';
+            const displayUrl = a.publicUrl || a.url || '';
+            html += `<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-weight:600">${dot} ${icon} ${name}</div><div style="font-size:12px;color:var(--text-muted)">${info}${displayUrl ? ' \u2014 <a href="'+displayUrl+'" target="_blank" style="color:var(--primary)">'+displayUrl+'</a>' : ''}</div></div>`;
+          }
+        }
+        el.innerHTML = html;
       } catch { el.innerHTML = '<span style="color:#e53e3e">Failed to load</span>'; }
     }
     function closeSettingsModal(){ settingsModal.style.display='none'; }

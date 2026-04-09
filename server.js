@@ -292,6 +292,7 @@ app.get('/api/config', (_req, res) => {
     version: require('./package.json').version,
     appName: 'Filament Manager',
     appId: 'filament-manager',
+    publicUrl: process.env.PUBLIC_URL || null,
     sharedAuth: sharedAuth.isEnabled(),
   });
 });
