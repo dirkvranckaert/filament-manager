@@ -283,6 +283,12 @@
       .col-3 { grid-column: span 6; }
       .col-2 { grid-column: span 4; }
     }
+  /* Settings tabs */
+  .settings-tabs { display:flex; gap:0; margin-bottom:16px; border-bottom:2px solid var(--border); }
+  .settings-tabs .tab { padding:8px 10px; border:none; background:none; color:var(--text-muted); font-size:12px; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap; transition:.15s; }
+  .settings-tabs .tab:hover { color:var(--text); }
+  .settings-tabs .tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+  .settings-panel.hidden { display:none; }
   </style>
 </head>
 <body>
@@ -448,58 +454,78 @@
 
   <!-- ==================== Settings Modal ==================== -->
   <div class="modal-overlay" id="settingsModal" style="display:none">
-    <div class="modal modal-sm">
+    <div class="modal" style="max-width:580px">
       <div class="modal-header">
         <h2>Settings</h2>
         <button class="modal-close" id="closeSettings">✕</button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <label for="themeSelect">Theme</label>
-          <select id="themeSelect" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;color:var(--text);background:var(--surface);font-family:inherit">
-            <option value="system">System (auto)</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
+        <div class="settings-tabs" id="fm-settings-tabs">
+          <button class="tab active" data-stab="general">General</button>
+          <button class="tab" data-stab="public">Public View</button>
+          <button class="tab" data-stab="data">Data</button>
+          <button class="tab" data-stab="apps">Connected Apps</button>
         </div>
-        <hr class="divider">
-        <div class="form-group">
-          <label for="rowsInput">Rows in carousel</label>
-          <input id="rowsInput" type="range" min="1" max="4" step="1" />
-          <small id="rowsHint" style="color:var(--text-muted);font-size:12px;display:block;margin-top:4px"></small>
+
+        <!-- General -->
+        <div class="settings-panel" data-panel="general">
+          <div class="form-group">
+            <label for="themeSelect">Theme</label>
+            <select id="themeSelect" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;color:var(--text);background:var(--surface);font-family:inherit">
+              <option value="system">System (auto)</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="rowsInput">Rows in carousel</label>
+            <input id="rowsInput" type="range" min="1" max="4" step="1" />
+            <small id="rowsHint" style="color:var(--text-muted);font-size:12px;display:block;margin-top:4px"></small>
+          </div>
         </div>
-        <hr class="divider">
-        <div class="form-group" style="margin-bottom:10px">
-          <label>Public swatch view</label>
-          <label class="switch" style="margin-top:6px">
-            <input type="checkbox" id="publicViewEnabled">
-            <span class="switch-label">Allow public access</span>
-          </label>
-        </div>
-        <div id="publicViewOptions" class="hidden">
+
+        <!-- Public View -->
+        <div class="settings-panel hidden" data-panel="public">
           <div class="form-group" style="margin-bottom:10px">
-            <label class="switch">
-              <input type="checkbox" id="publicViewInStockOnly">
-              <span class="switch-label">Show only in-stock filaments</span>
+            <label>Public swatch view</label>
+            <label class="switch" style="margin-top:6px">
+              <input type="checkbox" id="publicViewEnabled">
+              <span class="switch-label">Allow public access</span>
             </label>
           </div>
-          <div class="form-group" style="margin-bottom:0">
-            <label>Public URL</label>
-            <div style="display:flex;gap:8px;margin-top:4px;align-items:center">
-              <input type="text" id="publicViewUrl" readonly style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:12px;color:var(--text-muted);background:var(--bg);font-family:inherit;cursor:default">
-              <button type="button" id="copyPublicUrl" class="btn btn-secondary" style="white-space:nowrap">Copy link</button>
+          <div id="publicViewOptions" class="hidden">
+            <div class="form-group" style="margin-bottom:10px">
+              <label class="switch">
+                <input type="checkbox" id="publicViewInStockOnly">
+                <span class="switch-label">Show only in-stock filaments</span>
+              </label>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Public URL</label>
+              <div style="display:flex;gap:8px;margin-top:4px;align-items:center">
+                <input type="text" id="publicViewUrl" readonly style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:12px;color:var(--text-muted);background:var(--bg);font-family:inherit;cursor:default">
+                <button type="button" id="copyPublicUrl" class="btn btn-secondary" style="white-space:nowrap">Copy link</button>
+              </div>
             </div>
           </div>
         </div>
-        <hr class="divider">
-        <div class="form-group">
-          <label>Data</label>
-          <div style="display:flex;gap:8px;margin-top:6px">
-            <button type="button" id="exportBtn" class="btn btn-secondary">↓ Backup (ZIP)</button>
-            <button type="button" id="importBtn" class="btn btn-secondary">↑ Restore (ZIP / JSON)</button>
-            <input type="file" id="importFile" accept=".zip,application/json" style="display:none" />
+
+        <!-- Data -->
+        <div class="settings-panel hidden" data-panel="data">
+          <div class="form-group">
+            <label>Backup &amp; Restore</label>
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <button type="button" id="exportBtn" class="btn btn-secondary">↓ Backup (ZIP)</button>
+              <button type="button" id="importBtn" class="btn btn-secondary">↑ Restore (ZIP / JSON)</button>
+              <input type="file" id="importFile" accept=".zip,application/json" style="display:none" />
+            </div>
+            <p style="font-size:12px;color:var(--text-muted);margin-top:6px">Restore replaces all existing data. Accepts .zip backup or legacy .json file.</p>
           </div>
-          <p style="font-size:12px;color:var(--text-muted);margin-top:6px">Restore replaces all existing data. Accepts .zip backup or legacy .json file.</p>
+        </div>
+
+        <!-- Connected Apps -->
+        <div class="settings-panel hidden" data-panel="apps">
+          <div id="connected-apps-panel" style="font-size:13px;color:var(--text-muted)">Loading...</div>
         </div>
       </div>
       <div class="modal-footer">
@@ -1059,12 +1085,43 @@
       const pvUrl = $('#publicViewUrl');
       if (pvUrl) pvUrl.value = window.location.origin + '/swatches';
       settingsModal.style.display='flex';
+      loadConnectedApps();
+    }
+    async function loadConnectedApps() {
+      const el = $('#connected-apps-panel');
+      if (!el) return;
+      try {
+        const data = await api('GET', '/api/discover');
+        const config = await api('GET', '/api/config');
+        if (!config.sharedAuth) {
+          el.innerHTML = '<span>Shared auth not configured. Set <code>SHARED_AUTH_SECRET</code> in .env.</span>';
+          return;
+        }
+        const appNames = { planner: 'PrintFarm Planner', calculator: '3D Project Calculator' };
+        const keys = Object.keys(data.apps || {});
+        if (!keys.length) { el.innerHTML = '<span>No sibling app URLs configured.</span>'; return; }
+        el.innerHTML = keys.map(k => {
+          const a = data.apps[k];
+          const dot = a.available ? '\ud83d\udfe2' : '\ud83d\udd34';
+          return `<div style="padding:4px 0">${dot} <strong>${appNames[k]||k}</strong> \u2014 ${a.available ? 'v'+(a.version||'?') : 'Unreachable'}</div>`;
+        }).join('');
+      } catch { el.innerHTML = '<span style="color:#e53e3e">Failed to load</span>'; }
     }
     function closeSettingsModal(){ settingsModal.style.display='none'; }
 
     rowsInput.addEventListener('input', ()=>{ rowsHint.textContent=`${rowsInput.value} row${rowsInput.value>1?'s':''}`; });
     $('#settingsBtn').addEventListener('click', openSettings);
     $('#closeSettings').addEventListener('click', closeSettingsModal);
+
+    // Settings tab switching
+    document.getElementById('fm-settings-tabs')?.addEventListener('click', e => {
+      const tab = e.target.closest('.tab');
+      if (!tab) return;
+      const panel = tab.dataset.stab;
+      document.querySelectorAll('#fm-settings-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.stab === panel));
+      document.querySelectorAll('.settings-panel').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== panel));
+      if (panel === 'apps') loadConnectedApps();
+    });
     $('#cancelSettings').addEventListener('click', closeSettingsModal);
     settingsModal.addEventListener('click', e=>{ if(e.target===settingsModal) closeSettingsModal(); });
 
