@@ -454,7 +454,7 @@
 
   <!-- ==================== Settings Modal ==================== -->
   <div class="modal-overlay" id="settingsModal" style="display:none">
-    <div class="modal" style="max-width:580px">
+    <div class="modal" style="max-width:720px">
       <div class="modal-header">
         <h2>Settings</h2>
         <button class="modal-close" id="closeSettings">✕</button>
@@ -529,8 +529,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="cancelSettings">Cancel</button>
-        <button class="btn btn-primary"   id="saveSettings">Save</button>
+        <button class="btn btn-secondary" id="cancelSettings">Close</button>
       </div>
     </div>
   </div>
@@ -1125,27 +1124,24 @@
     $('#cancelSettings').addEventListener('click', closeSettingsModal);
     settingsModal.addEventListener('click', e=>{ if(e.target===settingsModal) closeSettingsModal(); });
 
-    $('#saveSettings').addEventListener('click', async ()=>{
-      const themeVal = themeSelect?.value ?? 'system';
-      applyTheme(themeVal);
-      try { await api('PUT','/api/settings/theme',{value:themeVal}); } catch{}
-
-      const rows=parseInt(rowsInput.value,10)||2;
+    // Auto-save settings on change
+    themeSelect?.addEventListener('change', async function() {
+      applyTheme(this.value);
+      try { await api('PUT','/api/settings/theme',{value:this.value}); } catch{}
+    });
+    rowsInput?.addEventListener('change', async function() {
+      const rows = parseInt(this.value,10)||2;
       document.documentElement.style.setProperty('--rows',rows);
+      rowsHint.textContent = `${rows} row${rows>1?'s':''}`;
       try { await api('PUT','/api/settings/rows',{value:rows}); } catch{}
-
-      const pvEnabled = $('#publicViewEnabled')?.checked ?? false;
-      try { await api('PUT','/api/settings/publicViewEnabled',{value:pvEnabled}); } catch{}
-      const pvInStockOnly = $('#publicViewInStockOnly')?.checked ?? false;
-      try { await api('PUT','/api/settings/publicViewInStockOnly',{value:pvInStockOnly}); } catch{}
-
-      closeSettingsModal();
       render();
     });
-
-    // ===== Public view settings listeners =====
-    $('#publicViewEnabled')?.addEventListener('change', e => {
-      $('#publicViewOptions').classList.toggle('hidden', !e.target.checked);
+    $('#publicViewEnabled')?.addEventListener('change', async function() {
+      $('#publicViewOptions').classList.toggle('hidden', !this.checked);
+      try { await api('PUT','/api/settings/publicViewEnabled',{value:this.checked}); } catch{}
+    });
+    $('#publicViewInStockOnly')?.addEventListener('change', async function() {
+      try { await api('PUT','/api/settings/publicViewInStockOnly',{value:this.checked}); } catch{}
     });
     $('#copyPublicUrl')?.addEventListener('click', () => {
       const url = $('#publicViewUrl')?.value;
