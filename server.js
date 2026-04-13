@@ -106,7 +106,7 @@ app.use('/uploads', express.static(uploadsDir));
 
 // --- Session auth middleware ---
 app.use((req, res, next) => {
-  if (['/favicon.svg', '/manifest.json', '/sw.js', '/api/config'].includes(req.path)) return next();
+  if (['/favicon.svg', '/manifest.json', '/sw.js', '/apple-touch-icon.png', '/api/config'].includes(req.path)) return next();
   const token = parseCookieToken(req);
   if (token && isValidSession(token)) return next();
   if (sharedAuth.validateSharedToken(req)) return next();

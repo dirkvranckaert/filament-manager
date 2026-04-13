@@ -1,0 +1,14 @@
+{
+  "name": "Filament Manager",
+  "short_name": "Filaments",
+  "description": "3D printing filament inventory",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#0f766e",
+  "orientation": "any",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any maskable" },
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
