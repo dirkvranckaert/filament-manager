@@ -100,6 +100,22 @@
     .btn-secondary:hover { background: var(--bg); }
     .btn-danger    { background: var(--surface); color: var(--danger); border-color: var(--danger); }
     .btn-danger:hover { background: rgba(229,62,62,.12); color: var(--danger); }
+    .btn-icon {
+      padding: 6px;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: var(--radius);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      width: 32px;
+      height: 32px;
+    }
+    .btn-icon:hover { background: var(--bg); color: var(--text); }
+    .btn-icon svg { display: block; }
     .hidden { display: none !important; }
 
     /* ── Page layout ── */
@@ -302,12 +318,20 @@
       .col-3 { grid-column: span 6; }
       .col-2 { grid-column: span 4; }
     }
+    /* Phones: tighten the topbar so it fits in ~360px wide */
+    @media (max-width: 480px) {
+      .topbar { padding: 0 10px; height: 48px; }
+      .app-title { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+      .topbar-right { gap: 6px; }
+      .count-chip { display: none; }
+      .topbar-right .btn { padding: 5px 10px; font-size: 12px; }
+    }
   /* Settings tabs */
   .settings-tabs { display:flex; gap:0; margin-bottom:16px; border-bottom:2px solid var(--border); overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
   .settings-tabs::-webkit-scrollbar { display:none; }
   .settings-tabs .tab { padding:8px 10px; border:none; background:none; color:var(--text-muted); font-size:12px; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap; transition:.15s; }
   .settings-tabs .tab:hover { color:var(--text); }
-  .settings-tabs .tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+  .settings-tabs .tab.active { color:var(--primary); border-bottom:2px solid var(--primary); }
   /* Settings modal width: 900px on desktop, full-screen on phones */
   #settingsModal .modal { width: 900px; max-width: 95vw; }
   @media (max-width: 480px) {
@@ -326,9 +350,13 @@
     </div>
     <div class="topbar-right">
       <span class="count-chip" id="countChip">0 items</span>
-      <button class="btn btn-secondary" id="settingsBtn">⚙ Settings</button>
-      <button class="btn btn-primary"   id="newBtn">+ Add Filament</button>
-      <a href="/logout" class="btn btn-secondary">Sign out</a>
+      <button class="btn btn-primary" id="newBtn">+ Add</button>
+      <button class="btn btn-icon" id="settingsBtn" title="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      </button>
+      <a class="btn btn-icon" href="/logout" title="Sign out">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      </a>
     </div>
   </header>
 
