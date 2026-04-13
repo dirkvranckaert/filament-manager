@@ -329,9 +329,9 @@
   /* Settings tabs */
   .settings-tabs { display:flex; gap:0; margin-bottom:16px; border-bottom:2px solid var(--border); overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
   .settings-tabs::-webkit-scrollbar { display:none; }
-  .settings-tabs .tab { padding:8px 10px; border:none; background:none; color:var(--text-muted); font-size:12px; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap; transition:.15s; }
+  .settings-tabs .tab { padding:8px 10px; border:none; background:none; color:var(--text-muted); font-size:12px; font-weight:600; cursor:pointer; box-shadow: inset 0 -2px 0 transparent; white-space:nowrap; transition: color .15s, box-shadow .15s; }
   .settings-tabs .tab:hover { color:var(--text); }
-  .settings-tabs .tab.active { color:var(--primary); border-bottom:2px solid var(--primary); }
+  .settings-tabs .tab.active { color:var(--primary); box-shadow: inset 0 -2px 0 var(--primary); }
   /* Settings modal width: 900px on desktop, full-screen on phones */
   #settingsModal .modal { width: 900px; max-width: 95vw; }
   @media (max-width: 480px) {
