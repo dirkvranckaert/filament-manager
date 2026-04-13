@@ -2,11 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Filament Manager — Sign In</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    /* Mobile Safari button reset — see memory: mobile_safari_rules.md */
+    button {
+      -webkit-appearance: none;
+      appearance: none;
+      font: inherit;
+      color: inherit;
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
+      cursor: pointer;
+    }
     :root {
       --primary: #0f766e;
       --primary-h: #0d6059;
@@ -41,6 +53,9 @@
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
+      min-height: 100dvh;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
       display: flex;
       align-items: center;
       justify-content: center;
