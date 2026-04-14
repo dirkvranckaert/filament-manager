@@ -524,6 +524,10 @@ app.get('/api/discover', async (_req, res) => {
   res.json({ sharedAuth: sharedAuth.isEnabled(), apps });
 });
 
-app.listen(process.env.PORT || 3002, () => {
-  console.log(`Filament Manager running on port ${process.env.PORT || 3002}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(process.env.PORT || 3002, () => {
+    console.log(`Filament Manager running on port ${process.env.PORT || 3002}`);
+  });
+}
+
+module.exports = { app, db };
