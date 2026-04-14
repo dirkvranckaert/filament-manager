@@ -123,6 +123,28 @@
     .gallery.editable .item .delete { display: flex; }
     .gallery-empty { padding: 24px; text-align: center; color: var(--text-muted); border: 2px dashed var(--border); border-radius: var(--radius); font-size: 13px; }
 
+    /* Upload progress bar */
+    .upload-progress {
+      margin-top: 12px; padding: 10px 12px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+      display: none; flex-direction: column; gap: 6px;
+    }
+    .upload-progress.active { display: flex; }
+    .upload-progress .label { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; }
+    .upload-progress .bar { height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; }
+    .upload-progress .bar-fill {
+      height: 100%; width: 0%; background: var(--primary);
+      transition: width .15s linear;
+    }
+    .upload-progress.indeterminate .bar-fill {
+      width: 30% !important;
+      animation: indeterminate 1.2s ease-in-out infinite;
+    }
+    @keyframes indeterminate {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(380%); }
+    }
+
     /* Drag-and-drop */
     .drop-zone { position: relative; }
     .drop-zone.dragover {
@@ -290,6 +312,12 @@
               </div>`
             : `<div class="gallery-empty">No images yet${isLoggedIn ? ' — tap "＋ Add images" or drop files here to upload' : ''}.</div>`}
           ${isLoggedIn ? '<input type="file" id="file-input" accept="image/*,.heic,.heif" multiple style="display:none">' : ''}
+          ${isLoggedIn ? `
+            <div class="upload-progress" id="upload-progress">
+              <div class="label"><span id="upload-label">Preparing…</span><span id="upload-percent"></span></div>
+              <div class="bar"><div class="bar-fill" id="upload-fill"></div></div>
+            </div>
+          ` : ''}
         </div>
       `;
 
@@ -403,25 +431,70 @@
       }
     }
 
+    function showProgress(label, indeterminate = false, percent = 0) {
+      const wrap = $('#upload-progress');
+      const lbl  = $('#upload-label');
+      const pct  = $('#upload-percent');
+      const fill = $('#upload-fill');
+      if (!wrap) return;
+      wrap.classList.add('active');
+      wrap.classList.toggle('indeterminate', !!indeterminate);
+      lbl.textContent = label;
+      pct.textContent = indeterminate ? '' : Math.round(percent) + '%';
+      if (!indeterminate) fill.style.width = Math.min(100, Math.max(0, percent)) + '%';
+    }
+    function hideProgress() {
+      const wrap = $('#upload-progress');
+      if (!wrap) return;
+      wrap.classList.remove('active', 'indeterminate');
+      $('#upload-fill').style.width = '0%';
+    }
+
+    function postWithProgress(url, formData, onProgress) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+        xhr.withCredentials = true;
+        xhr.upload.addEventListener('progress', e => {
+          if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total);
+        });
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText);
+          else reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText || xhr.statusText}`));
+        });
+        xhr.addEventListener('error', () => reject(new Error('Network error')));
+        xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+        xhr.send(formData);
+      });
+    }
+
     async function uploadFiles(fileList) {
       if (!fileList?.length) return;
       const btn = $('#upload-btn');
+      const total = fileList.length;
       btn.disabled = true;
       btn.textContent = 'Uploading…';
       try {
-        const fd = new FormData();
-        for (const f of fileList) {
-          const out = await fileToJpeg(f);
-          fd.append('images', out);
+        // Phase 1: convert any HEIC files. heic2any can be slow on large
+        // photos so we show indeterminate progress while it runs.
+        const converted = [];
+        for (let i = 0; i < total; i++) {
+          showProgress(`Preparing ${i + 1} of ${total}…`, true);
+          converted.push(await fileToJpeg(fileList[i]));
         }
-        const res = await fetch(`/api/filaments/${filamentId}/images`, {
-          method: 'POST',
-          credentials: 'include',
-          body: fd,
+        // Phase 2: actual upload — XHR exposes byte-level progress that
+        // fetch() does not.
+        const fd = new FormData();
+        for (const f of converted) fd.append('images', f);
+        showProgress(`Uploading ${total} image${total === 1 ? '' : 's'}…`, false, 0);
+        await postWithProgress(`/api/filaments/${filamentId}/images`, fd, (loaded, totalBytes) => {
+          const pct = (loaded / totalBytes) * 100;
+          showProgress(`Uploading ${total} image${total === 1 ? '' : 's'}…`, false, pct);
         });
-        if (!res.ok) throw new Error('Upload failed');
+        showProgress('Done', false, 100);
         await init();
       } catch (e) {
+        hideProgress();
         alert('Upload failed: ' + (e.message || e));
         btn.disabled = false;
         btn.textContent = '＋ Add images';
