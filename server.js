@@ -89,10 +89,13 @@ app.get('/logout', (req, res) => {
 
 // Lightweight auth probe so public pages can detect whether they should
 // show admin affordances (upload buttons, edit, etc.). Always returns 200.
+// Mirrors the auth middleware: a valid local session OR a valid shared SSO
+// token both count as logged-in.
 app.get('/api/whoami', (req, res) => {
   const token = parseCookieToken(req);
-  const valid = token && isValidSession(token);
-  res.json({ loggedIn: !!valid });
+  const localOk = token && isValidSession(token);
+  const sharedOk = sharedAuth.validateSharedToken(req);
+  res.json({ loggedIn: !!(localOk || sharedOk) });
 });
 
 // --- Public routes (no auth required) ---
