@@ -161,18 +161,61 @@
     }
     .drop-zone.dragover .drop-overlay { display: flex; }
 
-    /* Lightbox */
+    /* Lightbox / image slider */
     .lightbox {
       position: fixed; inset: 0; background: rgba(0,0,0,.92);
-      display: none; align-items: center; justify-content: center;
-      z-index: 100; padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+      display: none; flex-direction: column;
+      z-index: 100; user-select: none;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
     }
     .lightbox.open { display: flex; }
-    .lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }
-    .lightbox .close {
-      position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 16px;
+    .lightbox-bar {
+      flex-shrink: 0; height: 48px; padding: 0 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      color: #fff; font-size: 14px; font-weight: 600;
+    }
+    .lightbox-bar button {
       width: 40px; height: 40px; border-radius: 50%;
       background: rgba(255,255,255,.15); color: #fff; font-size: 22px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .lightbox-bar button:hover { background: rgba(255,255,255,.25); }
+    .lightbox-counter { font-variant-numeric: tabular-nums; font-size: 13px; opacity: .8; }
+    .lightbox-stage {
+      flex: 1; position: relative; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      touch-action: pan-y;
+    }
+    .lightbox-track {
+      display: flex; align-items: center;
+      width: 100%; height: 100%;
+      transition: transform .25s ease;
+      will-change: transform;
+    }
+    .lightbox-track.dragging { transition: none; }
+    .lightbox-slide {
+      flex: 0 0 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 16px;
+    }
+    .lightbox-slide img {
+      max-width: 100%; max-height: 100%; object-fit: contain;
+      pointer-events: none; /* let the stage receive touches */
+    }
+    .lightbox-arrow {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 48px; height: 48px; border-radius: 50%;
+      background: rgba(255,255,255,.15); color: #fff; font-size: 28px;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 2;
+    }
+    .lightbox-arrow:hover { background: rgba(255,255,255,.28); }
+    .lightbox-arrow.prev { left: 12px; }
+    .lightbox-arrow.next { right: 12px; }
+    .lightbox-arrow.disabled { opacity: .25; pointer-events: none; }
+    @media (max-width: 480px) {
+      .lightbox-arrow { display: none; }   /* mobile uses swipe */
     }
 
     /* Mobile */
@@ -194,9 +237,16 @@
     <div class="card" id="loading" style="text-align:center;color:var(--text-muted)">Loading…</div>
   </main>
 
-  <div class="lightbox" id="lightbox">
-    <button class="close" id="lightbox-close">✕</button>
-    <img id="lightbox-img" alt="">
+  <div class="lightbox" id="lightbox" aria-hidden="true">
+    <div class="lightbox-bar">
+      <span class="lightbox-counter" id="lightbox-counter"></span>
+      <button id="lightbox-close" type="button" aria-label="Close">✕</button>
+    </div>
+    <div class="lightbox-stage" id="lightbox-stage">
+      <button class="lightbox-arrow prev" id="lightbox-prev" type="button" aria-label="Previous">‹</button>
+      <div class="lightbox-track" id="lightbox-track"></div>
+      <button class="lightbox-arrow next" id="lightbox-next" type="button" aria-label="Next">›</button>
+    </div>
   </div>
 
   <script>
@@ -332,12 +382,11 @@
       });
 
       // Wire gallery
-      $$('.gallery .item').forEach(item => {
+      const galleryUrls = (f.images || []).map(img => img.url);
+      $$('.gallery .item').forEach((item, idx) => {
         item.addEventListener('click', e => {
           if (e.target.classList.contains('delete')) return;
-          const url = item.dataset.url;
-          $('#lightbox-img').src = url;
-          $('#lightbox').classList.add('open');
+          openLightbox(galleryUrls, idx);
         });
         const del = item.querySelector('.delete');
         if (del) del.addEventListener('click', async e => {
@@ -508,10 +557,97 @@
       else location.href = '/';
     });
 
-    // Lightbox close
-    $('#lightbox-close').addEventListener('click', () => $('#lightbox').classList.remove('open'));
-    $('#lightbox').addEventListener('click', e => { if (e.target === $('#lightbox')) $('#lightbox').classList.remove('open'); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#lightbox').classList.remove('open'); });
+    // ---- Lightbox slider ----
+    const lb = $('#lightbox');
+    const lbTrack = $('#lightbox-track');
+    const lbCounter = $('#lightbox-counter');
+    const lbPrev = $('#lightbox-prev');
+    const lbNext = $('#lightbox-next');
+    const lbStage = $('#lightbox-stage');
+    let lbUrls = [];
+    let lbIndex = 0;
+
+    function openLightbox(urls, startIndex) {
+      lbUrls = urls.slice();
+      lbIndex = Math.max(0, Math.min(startIndex, lbUrls.length - 1));
+      lbTrack.innerHTML = lbUrls.map(u => `
+        <div class="lightbox-slide"><img src="${u.replace(/"/g,'&quot;')}" alt=""></div>
+      `).join('');
+      lb.classList.add('open');
+      lb.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      updateLightbox(false);
+    }
+
+    function closeLightbox() {
+      lb.classList.remove('open');
+      lb.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      lbTrack.innerHTML = '';
+      lbUrls = [];
+    }
+
+    function updateLightbox(animate = true) {
+      lbTrack.classList.toggle('dragging', !animate);
+      lbTrack.style.transform = `translateX(${-lbIndex * 100}%)`;
+      lbCounter.textContent = lbUrls.length ? `${lbIndex + 1} / ${lbUrls.length}` : '';
+      lbPrev.classList.toggle('disabled', lbIndex <= 0);
+      lbNext.classList.toggle('disabled', lbIndex >= lbUrls.length - 1);
+    }
+
+    function lbStep(dir) {
+      const next = lbIndex + dir;
+      if (next < 0 || next >= lbUrls.length) return;
+      lbIndex = next;
+      updateLightbox(true);
+    }
+
+    $('#lightbox-close').addEventListener('click', closeLightbox);
+    lbPrev.addEventListener('click', () => lbStep(-1));
+    lbNext.addEventListener('click', () => lbStep(+1));
+
+    // Keyboard nav
+    document.addEventListener('keydown', e => {
+      if (!lb.classList.contains('open')) return;
+      if (e.key === 'Escape')      closeLightbox();
+      if (e.key === 'ArrowLeft')   lbStep(-1);
+      if (e.key === 'ArrowRight')  lbStep(+1);
+    });
+
+    // Touch swipe
+    let touchStartX = 0, touchStartY = 0, touchDx = 0, swiping = false;
+    lbStage.addEventListener('touchstart', e => {
+      if (e.touches.length !== 1) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchDx = 0;
+      swiping = true;
+    }, { passive: true });
+    lbStage.addEventListener('touchmove', e => {
+      if (!swiping) return;
+      const dx = e.touches[0].clientX - touchStartX;
+      const dy = e.touches[0].clientY - touchStartY;
+      // If the gesture is mostly vertical, bail out — let the user scroll.
+      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 12) { swiping = false; return; }
+      touchDx = dx;
+      // Drag the track with the finger
+      const pct = (dx / lbStage.clientWidth) * 100;
+      lbTrack.classList.add('dragging');
+      lbTrack.style.transform = `translateX(calc(${-lbIndex * 100}% + ${pct}%))`;
+    }, { passive: true });
+    lbStage.addEventListener('touchend', () => {
+      if (!swiping) return;
+      swiping = false;
+      const threshold = lbStage.clientWidth * 0.18;
+      if (touchDx <= -threshold && lbIndex < lbUrls.length - 1) lbIndex++;
+      else if (touchDx >= threshold && lbIndex > 0) lbIndex--;
+      updateLightbox(true);
+    });
+
+    // Click on the dimmed area outside the image closes; clicks on the image / arrows / counter don't.
+    lb.addEventListener('click', e => {
+      if (e.target === lb || e.target === lbStage || e.target.classList.contains('lightbox-track')) closeLightbox();
+    });
 
     async function init() {
       try {
