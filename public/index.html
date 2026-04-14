@@ -333,6 +333,31 @@
       .count-chip { display: none; }
       .topbar-right .btn { padding: 5px 10px; font-size: 12px; }
     }
+
+    /* Mobile: swatches render as a vertical list, not a paged carousel.
+       JS adds .mobile-list to #carousel when the viewport matches. */
+    .carousel.mobile-list {
+      flex-direction: column;
+      overflow-x: hidden;
+      overflow-y: visible;
+      scroll-snap-type: none;
+      padding: 8px;
+      gap: 8px;
+      touch-action: auto;
+    }
+    .carousel.mobile-list .page {
+      display: flex !important;
+      flex-direction: column;
+      width: 100%;
+      gap: 8px;
+    }
+    .carousel.mobile-list .swatch {
+      width: 100%;
+      height: 88px;
+    }
+    @media (max-width: 480px) {
+      .carousel-wrap > .navbtn { display: none; }
+    }
   /* Settings tabs */
   .settings-tabs { display:flex; gap:0; margin-bottom:16px; border-bottom:2px solid var(--border); overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
   .settings-tabs::-webkit-scrollbar { display:none; }
@@ -978,6 +1003,8 @@
       return pages;
     }
 
+    const isMobileLayout = () => window.matchMedia('(max-width: 480px)').matches;
+
     function render(){
       $('#countChip').textContent = `${items.length} item${items.length===1?'':'s'}`;
       const ordered = sortLightToDark(applyFilters(items));
@@ -989,16 +1016,23 @@
         return;
       }
 
-      const rows = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rows'))||2;
-      const pages = paginate(ordered, rows, computeColumns());
-      prevBtn.classList.toggle('hidden', pages.length <= 1);
-      nextBtn.classList.toggle('hidden', pages.length <= 1);
+      const mobile = isMobileLayout();
+      carousel.classList.toggle('mobile-list', mobile);
+
+      // On mobile the carousel becomes a single vertical list — no pagination,
+      // no nav buttons, no inline grid sizing. CSS handles full-width swatches.
+      const rows  = mobile ? 1 : (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rows'))||2);
+      const pages = mobile ? [ordered] : paginate(ordered, rows, computeColumns());
+      prevBtn.classList.toggle('hidden', mobile || pages.length <= 1);
+      nextBtn.classList.toggle('hidden', mobile || pages.length <= 1);
 
       for (let p=0; p<pages.length; p++){
         const pageEl = document.createElement('div');
         pageEl.className = 'page';
-        pageEl.style.gridTemplateRows = `repeat(${rows},var(--swatch-h))`;
-        pageEl.style.gridAutoColumns  = 'var(--swatch-w)';
+        if (!mobile) {
+          pageEl.style.gridTemplateRows = `repeat(${rows},var(--swatch-h))`;
+          pageEl.style.gridAutoColumns  = 'var(--swatch-w)';
+        }
         pageEl.dataset.page = String(p);
 
         for (const it of pages[p]){
