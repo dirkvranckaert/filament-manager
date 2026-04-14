@@ -52,7 +52,7 @@
       background: var(--surface); border-bottom: 1px solid var(--border);
       box-shadow: var(--shadow); position: sticky; top: 0; z-index: 10;
     }
-    .topbar a { color: var(--primary); text-decoration: none; font-weight: 600; }
+    .topbar a, .topbar .back-btn { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 15px; padding: 6px 8px; }
     .back-btn { display: inline-flex; align-items: center; gap: 4px; }
     .topbar h1 {
       font-size: 16px; font-weight: 700; color: var(--text);
@@ -123,6 +123,22 @@
     .gallery.editable .item .delete { display: flex; }
     .gallery-empty { padding: 24px; text-align: center; color: var(--text-muted); border: 2px dashed var(--border); border-radius: var(--radius); font-size: 13px; }
 
+    /* Drag-and-drop */
+    .drop-zone { position: relative; }
+    .drop-zone.dragover {
+      outline: 3px dashed var(--primary);
+      outline-offset: -3px;
+      background: rgba(15, 118, 110, 0.06);
+    }
+    .drop-overlay {
+      position: absolute; inset: 0; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(15, 118, 110, 0.85); color: #fff;
+      font-size: 18px; font-weight: 700; pointer-events: none;
+      border-radius: var(--radius); z-index: 5;
+    }
+    .drop-zone.dragover .drop-overlay { display: flex; }
+
     /* Lightbox */
     .lightbox {
       position: fixed; inset: 0; background: rgba(0,0,0,.92);
@@ -149,7 +165,7 @@
 </head>
 <body>
   <header class="topbar">
-    <a href="/" class="back-btn">‹ Back</a>
+    <button id="back-btn" class="back-btn" type="button">‹ Back</button>
     <h1 id="title">Filament</h1>
   </header>
   <main id="main">
@@ -257,13 +273,14 @@
 
       // Gallery
       html += `
-        <div class="card">
+        <div class="card ${isLoggedIn ? 'drop-zone' : ''}" id="gallery-card">
+          ${isLoggedIn ? '<div class="drop-overlay">Drop to upload</div>' : ''}
           <div class="gallery-header">
-            <h2>Gallery</h2>
+            <h2 id="gallery">Gallery</h2>
             ${isLoggedIn ? '<button id="upload-btn" class="upload-btn">＋ Add images</button>' : ''}
           </div>
           ${f.images.length
-            ? `<div class="gallery${isLoggedIn ? ' editable' : ''}" id="gallery">
+            ? `<div class="gallery${isLoggedIn ? ' editable' : ''}" id="gallery-grid">
                 ${f.images.map(img => `
                   <div class="item" data-id="${img.id}" data-url="${escHtml(img.url)}">
                     <img src="${escHtml(img.url)}" alt="${escHtml(img.caption || '')}" loading="lazy">
@@ -271,7 +288,7 @@
                   </div>
                 `).join('')}
               </div>`
-            : `<div class="gallery-empty">No images yet${isLoggedIn ? ' — tap "Add images" to upload' : ''}.</div>`}
+            : `<div class="gallery-empty">No images yet${isLoggedIn ? ' — tap "＋ Add images" or drop files here to upload' : ''}.</div>`}
           ${isLoggedIn ? '<input type="file" id="file-input" accept="image/*,.heic,.heif" multiple style="display:none">' : ''}
         </div>
       `;
@@ -306,11 +323,47 @@
       // Wire upload (logged-in only)
       const uploadBtn = $('#upload-btn');
       const fileInput = $('#file-input');
+      const dropZone = $('#gallery-card');
       if (uploadBtn && fileInput) {
         uploadBtn.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', () => uploadFiles(fileInput.files));
       }
+      // Drag-and-drop on the gallery card (re-attached on each render)
+      if (isLoggedIn && dropZone) {
+        ['dragenter', 'dragover'].forEach(ev => dropZone.addEventListener(ev, e => {
+          e.preventDefault(); e.stopPropagation();
+          dropZone.classList.add('dragover');
+        }));
+        ['dragleave', 'dragend'].forEach(ev => dropZone.addEventListener(ev, e => {
+          if (e.currentTarget === dropZone && (!e.relatedTarget || !dropZone.contains(e.relatedTarget))) {
+            dropZone.classList.remove('dragover');
+          }
+        }));
+        dropZone.addEventListener('drop', e => {
+          e.preventDefault(); e.stopPropagation();
+          dropZone.classList.remove('dragover');
+          const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+          if (files.length) uploadFiles(files);
+        });
+      }
     }
+
+    // ---- One-time global wiring (paste + window-level drag swallow) ----
+    document.addEventListener('paste', e => {
+      if (!isLoggedIn) return;
+      const items = Array.from(e.clipboardData?.items || []);
+      const files = items
+        .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+        .map(it => it.getAsFile())
+        .filter(Boolean);
+      if (files.length) uploadFiles(files);
+    });
+    // Prevent the browser from navigating to the dropped file when the user
+    // misses the drop zone. The drop zone has its own handler that runs first.
+    ['dragover', 'drop'].forEach(ev => window.addEventListener(ev, e => {
+      if (e.target.closest('#gallery-card')) return;
+      e.preventDefault();
+    }));
 
     async function ensureHeicLib() {
       if (heicLib) return heicLib;
@@ -361,6 +414,13 @@
         btn.textContent = '＋ Add images';
       }
     }
+
+    // Back button: prefer real history.back so it matches the browser back
+    // button. If we landed here via a direct URL (no history), fall back to /.
+    $('#back-btn').addEventListener('click', () => {
+      if (history.length > 1) history.back();
+      else location.href = '/';
+    });
 
     // Lightbox close
     $('#lightbox-close').addEventListener('click', () => $('#lightbox').classList.remove('open'));

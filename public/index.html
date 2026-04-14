@@ -618,7 +618,7 @@
           </div>
           <div class="form-group">
             <label for="cpName">Customer name</label>
-            <input type="text" id="cpName" placeholder="e.g. Karen Matthijs" style="width:100%">
+            <input type="text" id="cpName" placeholder="Customer name" style="width:100%">
           </div>
           <div class="form-group">
             <label>Slug (auto-generated, edit if you want a prettier link)</label>
@@ -671,6 +671,8 @@
 
   <!-- ==================== Context Menu ==================== -->
   <div class="ctx-menu" id="swatchCtxMenu" style="display:none">
+    <button class="ctx-item" id="ctxOpen">🔍 Open detail page</button>
+    <button class="ctx-item" id="ctxImages">📷 Manage images</button>
     <button class="ctx-item" id="ctxEdit">✏️ Edit</button>
     <button class="ctx-item danger" id="ctxDelete">🗑️ Delete</button>
   </div>
@@ -1163,6 +1165,14 @@
     document.addEventListener('click', hideCtxMenu);
     document.addEventListener('keydown', e=>{ if(e.key==='Escape') hideCtxMenu(); });
 
+    $('#ctxOpen').addEventListener('click', e=>{
+      e.stopPropagation(); const id=ctxTargetId; hideCtxMenu();
+      if(id!=null) window.location.href = `/filament/${id}`;
+    });
+    $('#ctxImages').addEventListener('click', e=>{
+      e.stopPropagation(); const id=ctxTargetId; hideCtxMenu();
+      if(id!=null) window.location.href = `/filament/${id}#gallery`;
+    });
     $('#ctxEdit').addEventListener('click', e=>{
       e.stopPropagation(); const id=ctxTargetId; hideCtxMenu(); if(id!=null) openForm(id);
     });
