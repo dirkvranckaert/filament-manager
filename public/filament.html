@@ -380,14 +380,27 @@
     }
 
     async function fileToJpeg(file) {
-      const isHeic = /heic|heif/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
-      if (isHeic) {
+      // Decide whether the file actually needs HEIC→JPEG conversion. iOS Safari
+      // can hand us files whose extension is .heic but whose MIME type is
+      // already image/jpeg (the "Most Compatible" capture mode auto-converts
+      // on share). Trust the type first; only treat the filename as a hint
+      // when the browser didn't sniff a usable image type at all.
+      const typeIsHeic  = /image\/(heic|heif)/i.test(file.type);
+      const typeIsImage = /^image\//.test(file.type);
+      const nameIsHeic  = /\.(heic|heif)$/i.test(file.name);
+      const shouldConvert = typeIsHeic || (!typeIsImage && nameIsHeic);
+      if (!shouldConvert) return file;
+      try {
         const lib = await ensureHeicLib();
         const blob = await lib({ blob: file, toType: 'image/jpeg', quality: 0.9 });
         return new File([blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' });
+      } catch (e) {
+        // heic2any throws ERR_USER ("Image is already browser readable") when
+        // the input is actually a JPEG/PNG with a .heic extension. Just upload
+        // it as-is in that case.
+        if (e && /already.*browser.*readable/i.test(e.message || '')) return file;
+        throw e;
       }
-      // Non-HEIC images upload as-is
-      return file;
     }
 
     async function uploadFiles(fileList) {
