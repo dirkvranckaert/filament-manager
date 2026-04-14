@@ -25,6 +25,20 @@ const uploadPattern = multer({
   }
 });
 
+// --- Multer: gallery image upload — same constraints, larger limit for multiple files ---
+const uploadGallery = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(req, file, cb) {
+    if (!file.mimetype.startsWith('image/')) return cb(new Error('Images only'));
+    cb(null, true);
+  }
+});
+
+// Gallery directory (per-filament subdirs created on first upload).
+const galleryDir = path.join(uploadsDir, 'filaments');
+fs.mkdirSync(galleryDir, { recursive: true });
+
 // --- Multer: ZIP backup import ---
 const uploadZip = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -73,9 +87,29 @@ app.get('/logout', (req, res) => {
   res.redirect('/login');
 });
 
+// Lightweight auth probe so public pages can detect whether they should
+// show admin affordances (upload buttons, edit, etc.). Always returns 200.
+app.get('/api/whoami', (req, res) => {
+  const token = parseCookieToken(req);
+  const valid = token && isValidSession(token);
+  res.json({ loggedIn: !!valid });
+});
+
 // --- Public routes (no auth required) ---
 app.get('/swatches', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'swatches.html'));
+});
+
+// Filament detail page — same shell for both private (auth via cookie) and
+// public (anonymous, only available if public view is enabled). The page's
+// JS picks the right API endpoint based on /api/config.
+app.get(/^\/filament\/(\d+)$/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'filament.html'));
+});
+
+// Customer-specific public page — anonymous, slug-based.
+app.get(/^\/c\/([a-z0-9-]+)$/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'customer-page.html'));
 });
 
 app.get('/api/public/settings', (req, res) => {
@@ -101,12 +135,51 @@ app.get('/api/public/filaments', (req, res) => {
   res.json(rows.map(toClient));
 });
 
+// Public detail (anonymous read of one filament + its gallery)
+app.get('/api/public/filament/:id', (req, res) => {
+  const enabledRow = db.prepare('SELECT value FROM settings WHERE key=?').get('publicViewEnabled');
+  let enabled = false;
+  try { enabled = JSON.parse(enabledRow?.value); } catch {}
+  if (!enabled) return res.status(403).json({ error: 'Public view disabled' });
+
+  const row = db.prepare('SELECT * FROM filaments WHERE id=?').get(req.params.id);
+  if (!row) return res.status(404).json(null);
+  const imgs = db.prepare(
+    'SELECT id, filamentId, filename, caption, sortOrder, createdAt FROM filament_images WHERE filamentId=? ORDER BY sortOrder ASC, id ASC'
+  ).all(req.params.id);
+  res.json({ ...toClient(row), images: imgs.map(r => ({ ...r, url: `/uploads/filaments/${r.filamentId}/${r.filename}` })) });
+});
+
+// Public read of a single customer page by slug (anonymous).
+app.get('/api/public/customer-pages/:slug', (req, res) => {
+  const enabledRow = db.prepare('SELECT value FROM settings WHERE key=?').get('publicViewEnabled');
+  let enabled = false;
+  try { enabled = JSON.parse(enabledRow?.value); } catch {}
+  if (!enabled) return res.status(403).json({ error: 'Public view disabled' });
+
+  const row = db.prepare('SELECT * FROM customer_pages WHERE slug=?').get(req.params.slug);
+  if (!row) return res.status(404).json(null);
+  let ids = []; try { ids = JSON.parse(row.filamentIds); } catch {}
+  const allFilaments = db.prepare('SELECT * FROM filaments').all().map(toClient);
+  const selected = (Array.isArray(ids) ? ids : [])
+    .map(id => allFilaments.find(f => f.id === id))
+    .filter(Boolean);
+  const others = row.showAllOthers
+    ? allFilaments.filter(f => !ids.includes(f.id))
+    : [];
+  res.json({
+    id: row.id, slug: row.slug, customerName: row.customerName,
+    filamentIds: ids, showAllOthers: !!row.showAllOthers,
+    selected, others,
+  });
+});
+
 // --- Serve uploaded pattern images publicly (needed for /swatches page) ---
 app.use('/uploads', express.static(uploadsDir));
 
 // --- Session auth middleware ---
 app.use((req, res, next) => {
-  if (['/favicon.svg', '/manifest.json', '/sw.js', '/apple-touch-icon.png', '/api/config'].includes(req.path)) return next();
+  if (['/favicon.svg', '/manifest.json', '/sw.js', '/apple-touch-icon.png', '/api/config', '/api/whoami', '/heic2any.min.js'].includes(req.path)) return next();
   const token = parseCookieToken(req);
   if (token && isValidSession(token)) return next();
   if (sharedAuth.validateSharedToken(req)) return next();
@@ -173,6 +246,148 @@ app.delete('/api/filaments/:id/pattern', (req, res) => {
   }
   res.status(204).end();
 });
+
+// --- Per-filament gallery images ---
+function imageUrl(row) {
+  return `/uploads/filaments/${row.filamentId}/${row.filename}`;
+}
+
+app.get('/api/filaments/:id/images', (req, res) => {
+  const rows = db.prepare(
+    'SELECT id, filamentId, filename, caption, sortOrder, createdAt FROM filament_images WHERE filamentId=? ORDER BY sortOrder ASC, id ASC'
+  ).all(req.params.id);
+  res.json(rows.map(r => ({ ...r, url: imageUrl(r) })));
+});
+
+app.post('/api/filaments/:id/images', uploadGallery.array('images', 12), (req, res) => {
+  if (!req.files?.length) return res.status(400).json({ error: 'No files uploaded' });
+  const filament = db.prepare('SELECT id FROM filaments WHERE id=?').get(req.params.id);
+  if (!filament) return res.status(404).json({ error: 'Filament not found' });
+
+  const dir = path.join(galleryDir, String(req.params.id));
+  fs.mkdirSync(dir, { recursive: true });
+
+  const lastSort = db.prepare('SELECT COALESCE(MAX(sortOrder), -1) AS m FROM filament_images WHERE filamentId=?')
+    .get(req.params.id).m;
+
+  const insert = db.prepare(
+    'INSERT INTO filament_images (filamentId, filename, caption, sortOrder, createdAt) VALUES (?,?,?,?,?)'
+  );
+  const created = [];
+  let order = lastSort + 1;
+  for (const file of req.files) {
+    // Always store as .jpg — the client converts HEIC/PNG before upload.
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeExt = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext) ? ext : '.jpg';
+    const filename = `${crypto.randomBytes(8).toString('hex')}${safeExt}`;
+    fs.writeFileSync(path.join(dir, filename), file.buffer);
+    const result = insert.run(req.params.id, filename, null, order++, Date.now());
+    created.push({
+      id: result.lastInsertRowid,
+      filamentId: Number(req.params.id),
+      filename,
+      caption: null,
+      sortOrder: order - 1,
+      createdAt: Date.now(),
+      url: `/uploads/filaments/${req.params.id}/${filename}`,
+    });
+  }
+  res.status(201).json(created);
+});
+
+app.patch('/api/filaments/:fid/images/:iid', (req, res) => {
+  const { caption, sortOrder } = req.body || {};
+  const fields = [];
+  const values = [];
+  if (caption !== undefined)   { fields.push('caption=?');   values.push(caption); }
+  if (sortOrder !== undefined) { fields.push('sortOrder=?'); values.push(sortOrder); }
+  if (!fields.length) return res.status(400).json({ error: 'No editable fields' });
+  values.push(req.params.iid, req.params.fid);
+  db.prepare(`UPDATE filament_images SET ${fields.join(', ')} WHERE id=? AND filamentId=?`).run(...values);
+  res.json({ ok: true });
+});
+
+app.delete('/api/filaments/:fid/images/:iid', (req, res) => {
+  const row = db.prepare('SELECT filename FROM filament_images WHERE id=? AND filamentId=?')
+    .get(req.params.iid, req.params.fid);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  try { fs.unlinkSync(path.join(galleryDir, String(req.params.fid), row.filename)); } catch {}
+  db.prepare('DELETE FROM filament_images WHERE id=? AND filamentId=?').run(req.params.iid, req.params.fid);
+  res.status(204).end();
+});
+
+// --- Customer pages (admin CRUD — auth-gated; public read-by-slug is below) ---
+function slugify(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'customer';
+}
+function uniqueSlug(base) {
+  let slug = base;
+  let n = 1;
+  while (db.prepare('SELECT 1 FROM customer_pages WHERE slug=?').get(slug)) {
+    n++;
+    slug = `${base}-${n}`;
+  }
+  return slug;
+}
+function customerPageToClient(row) {
+  if (!row) return null;
+  let ids = [];
+  try { ids = JSON.parse(row.filamentIds); } catch {}
+  return {
+    id: row.id,
+    slug: row.slug,
+    customerName: row.customerName,
+    filamentIds: Array.isArray(ids) ? ids : [],
+    showAllOthers: !!row.showAllOthers,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    url: `/c/${row.slug}`,
+  };
+}
+
+app.get('/api/customer-pages', (req, res) => {
+  const rows = db.prepare('SELECT * FROM customer_pages ORDER BY updatedAt DESC').all();
+  res.json(rows.map(customerPageToClient));
+});
+
+app.post('/api/customer-pages', (req, res) => {
+  const { customerName, filamentIds, showAllOthers, slug } = req.body || {};
+  if (!customerName?.trim()) return res.status(400).json({ error: 'customerName required' });
+  const baseSlug = slug?.trim() ? slugify(slug) : slugify(customerName);
+  const finalSlug = uniqueSlug(baseSlug);
+  const now = Date.now();
+  const result = db.prepare(
+    'INSERT INTO customer_pages (slug, customerName, filamentIds, showAllOthers, createdAt, updatedAt) VALUES (?,?,?,?,?,?)'
+  ).run(finalSlug, customerName.trim(), JSON.stringify(filamentIds || []), showAllOthers ? 1 : 0, now, now);
+  res.status(201).json(customerPageToClient(db.prepare('SELECT * FROM customer_pages WHERE id=?').get(result.lastInsertRowid)));
+});
+
+app.put('/api/customer-pages/:id', (req, res) => {
+  const { customerName, filamentIds, showAllOthers } = req.body || {};
+  const existing = db.prepare('SELECT * FROM customer_pages WHERE id=?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  db.prepare(
+    'UPDATE customer_pages SET customerName=?, filamentIds=?, showAllOthers=?, updatedAt=? WHERE id=?'
+  ).run(
+    customerName?.trim() || existing.customerName,
+    JSON.stringify(filamentIds || []),
+    showAllOthers ? 1 : 0,
+    Date.now(),
+    req.params.id,
+  );
+  res.json(customerPageToClient(db.prepare('SELECT * FROM customer_pages WHERE id=?').get(req.params.id)));
+});
+
+app.delete('/api/customer-pages/:id', (req, res) => {
+  db.prepare('DELETE FROM customer_pages WHERE id=?').run(req.params.id);
+  res.status(204).end();
+});
+
 
 // --- Settings ---
 app.get('/api/settings/:key', (req, res) => {

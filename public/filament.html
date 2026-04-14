@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Filament — Filament Manager</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Filaments">
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #1a202c;
+      --text-muted: #718096;
+      --primary: #0f766e;
+      --primary-h: #0d6059;
+      --danger: #e53e3e;
+      --radius: 8px;
+      --shadow: 0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0f172a; --surface: #1e293b; --border: #334155;
+        --text: #f1f5f9; --text-muted: #94a3b8;
+        --primary: #14b8a6; --primary-h: #0d9488;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    button {
+      -webkit-appearance: none; appearance: none;
+      font: inherit; color: inherit; background: transparent;
+      border: none; padding: 0; margin: 0; cursor: pointer;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px; color: var(--text); background: var(--bg);
+      min-height: 100vh; min-height: 100dvh;
+    }
+    @supports (padding-top: env(safe-area-inset-top)) {
+      body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+      .topbar { background-clip: padding-box; }
+    }
+    .topbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 16px; height: 52px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow); position: sticky; top: 0; z-index: 10;
+    }
+    .topbar a { color: var(--primary); text-decoration: none; font-weight: 600; }
+    .back-btn { display: inline-flex; align-items: center; gap: 4px; }
+    .topbar h1 {
+      font-size: 16px; font-weight: 700; color: var(--text);
+      flex: 1; min-width: 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    main { max-width: 880px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+    .swatch-hero {
+      width: 100%; aspect-ratio: 16/9; max-height: 280px;
+      border-radius: var(--radius); border: 1px solid rgba(0,0,0,.08);
+      box-shadow: 0 4px 12px rgba(0,0,0,.18);
+      background-size: cover; background-position: center;
+      position: relative;
+    }
+    .swatch-hero .stock-badge {
+      position: absolute; top: 12px; right: 12px;
+      padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      background: rgba(255,255,255,.92); color: #1a202c;
+      border: 1px solid rgba(0,0,0,.12);
+    }
+    .swatch-hero .stock-badge.out {
+      background: rgba(0,0,0,.42); color: #fff; border-color: rgba(255,255,255,.25);
+    }
+    .heading { display: flex; flex-direction: column; gap: 4px; }
+    .heading .brand { font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+    .heading .name  { font-size: 22px; font-weight: 700; color: var(--text); }
+    .heading .meta  { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+    .info-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 12px; }
+    .info-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg);
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px;
+    }
+    .info-row .label { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; min-width: 38px; }
+    .info-row .value { flex: 1; user-select: all; word-break: break-all; }
+    .info-row .copy-btn {
+      padding: 6px 10px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border);
+      font-size: 12px; color: var(--text-muted); font-family: -apple-system, sans-serif;
+    }
+    .info-row .copy-btn:hover { background: var(--border); }
+    .info-row.copied .copy-btn { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    .gallery-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .gallery-header h2 { font-size: 14px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: .5px; }
+    .upload-btn {
+      padding: 6px 14px; border-radius: 6px; background: var(--primary); color: #fff;
+      font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .upload-btn:hover { background: var(--primary-h); }
+    .upload-btn:disabled { opacity: .6; cursor: default; }
+    .gallery {
+      display: grid; gap: 8px;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
+    .gallery .item {
+      position: relative; aspect-ratio: 1; border-radius: var(--radius); overflow: hidden;
+      background: var(--bg); border: 1px solid var(--border); cursor: zoom-in;
+    }
+    .gallery .item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .gallery .item .delete {
+      position: absolute; top: 6px; right: 6px; width: 26px; height: 26px;
+      background: rgba(0,0,0,.55); color: #fff; border-radius: 50%; font-size: 14px;
+      display: none; align-items: center; justify-content: center;
+    }
+    .gallery .item:hover .delete { display: flex; }
+    .gallery.editable .item .delete { display: flex; }
+    .gallery-empty { padding: 24px; text-align: center; color: var(--text-muted); border: 2px dashed var(--border); border-radius: var(--radius); font-size: 13px; }
+
+    /* Lightbox */
+    .lightbox {
+      position: fixed; inset: 0; background: rgba(0,0,0,.92);
+      display: none; align-items: center; justify-content: center;
+      z-index: 100; padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+    }
+    .lightbox.open { display: flex; }
+    .lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .lightbox .close {
+      position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 16px;
+      width: 40px; height: 40px; border-radius: 50%;
+      background: rgba(255,255,255,.15); color: #fff; font-size: 22px;
+    }
+
+    /* Mobile */
+    @media (max-width: 480px) {
+      main { padding: 12px; gap: 12px; }
+      .card { padding: 14px; }
+      .swatch-hero { aspect-ratio: 4/3; max-height: 220px; }
+      .heading .name { font-size: 19px; }
+      .gallery { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a href="/" class="back-btn">‹ Back</a>
+    <h1 id="title">Filament</h1>
+  </header>
+  <main id="main">
+    <div class="card" id="loading" style="text-align:center;color:var(--text-muted)">Loading…</div>
+  </main>
+
+  <div class="lightbox" id="lightbox">
+    <button class="close" id="lightbox-close">✕</button>
+    <img id="lightbox-img" alt="">
+  </div>
+
+  <script>
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+    const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+    // Filament id from /filament/<id>
+    const idMatch = location.pathname.match(/^\/filament\/(\d+)$/);
+    const filamentId = idMatch ? Number(idMatch[1]) : null;
+    if (!filamentId) { document.body.innerHTML = '<p style="padding:32px;text-align:center">Invalid filament id.</p>'; throw new Error('no id'); }
+
+    let isLoggedIn = false;
+    let heicLib = null;
+
+    async function detectAuth() {
+      try {
+        const r = await fetch('/api/whoami', { credentials: 'include' });
+        if (!r.ok) { isLoggedIn = false; return; }
+        const j = await r.json();
+        isLoggedIn = !!j.loggedIn;
+      } catch { isLoggedIn = false; }
+    }
+
+    async function loadFilament() {
+      if (isLoggedIn) {
+        // Pull the row from the list since there's no /api/filaments/:id (yet).
+        const r = await fetch('/api/filaments', { credentials: 'include' });
+        if (!r.ok) throw new Error('Filament not found or unavailable');
+        const list = await r.json();
+        const f = list.find(x => x.id === filamentId);
+        if (!f) throw new Error('Filament not found');
+        const r2 = await fetch(`/api/filaments/${filamentId}/images`, { credentials: 'include' });
+        f.images = r2.ok ? await r2.json() : [];
+        return f;
+      }
+      const r = await fetch(`/api/public/filament/${filamentId}`, { credentials: 'include' });
+      if (!r.ok) throw new Error('Filament not found or unavailable');
+      const f = await r.json();
+      f.images = f.images || [];
+      return f;
+    }
+
+    function rgbCss(rgb) {
+      if (!rgb) return '';
+      return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+    }
+
+    function copy(text, row) {
+      navigator.clipboard?.writeText(text).then(() => {
+        row.classList.add('copied');
+        const btn = row.querySelector('.copy-btn');
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { row.classList.remove('copied'); btn.textContent = orig; }, 1200);
+      }).catch(() => {});
+    }
+
+    function render(f) {
+      document.title = `${f.brand} ${f.colorName} — Filament Manager`;
+      $('#title').textContent = `${f.brand} — ${f.colorName}`;
+
+      const main = $('#main');
+      const hexUpper = (f.colorHex || '').toUpperCase();
+      const rgbStr = f.colorRGB ? `rgb(${f.colorRGB.r}, ${f.colorRGB.g}, ${f.colorRGB.b})` : '';
+
+      const swatchStyle = f.patternImage
+        ? `background-color:${f.colorHex};background-image:url(/uploads/${encodeURIComponent(f.patternImage)})`
+        : `background-color:${f.colorHex}`;
+
+      // Hero + heading + info
+      let html = `
+        <div class="card">
+          <div class="swatch-hero" style="${swatchStyle}">
+            <span class="stock-badge ${f.inStock ? '' : 'out'}">${f.inStock ? 'In stock' : 'Out of stock'}</span>
+          </div>
+          <div class="heading" style="margin-top:14px">
+            <span class="brand">${escHtml(f.brand)}</span>
+            <span class="name">${escHtml(f.colorName)}</span>
+            <span class="meta">${escHtml(f.type)} (${escHtml(f.variant || 'Basic')})</span>
+          </div>
+          <div class="info-grid">
+            <div class="info-row" data-copy="${escHtml(hexUpper)}">
+              <span class="label">HEX</span>
+              <span class="value">${escHtml(hexUpper)}</span>
+              ${isLoggedIn ? '<button class="copy-btn">Copy</button>' : ''}
+            </div>
+            <div class="info-row" data-copy="${escHtml(rgbStr)}">
+              <span class="label">RGB</span>
+              <span class="value">${escHtml(rgbStr)}</span>
+              ${isLoggedIn ? '<button class="copy-btn">Copy</button>' : ''}
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Gallery
+      html += `
+        <div class="card">
+          <div class="gallery-header">
+            <h2>Gallery</h2>
+            ${isLoggedIn ? '<button id="upload-btn" class="upload-btn">＋ Add images</button>' : ''}
+          </div>
+          ${f.images.length
+            ? `<div class="gallery${isLoggedIn ? ' editable' : ''}" id="gallery">
+                ${f.images.map(img => `
+                  <div class="item" data-id="${img.id}" data-url="${escHtml(img.url)}">
+                    <img src="${escHtml(img.url)}" alt="${escHtml(img.caption || '')}" loading="lazy">
+                    ${isLoggedIn ? '<button class="delete" title="Delete">✕</button>' : ''}
+                  </div>
+                `).join('')}
+              </div>`
+            : `<div class="gallery-empty">No images yet${isLoggedIn ? ' — tap "Add images" to upload' : ''}.</div>`}
+          ${isLoggedIn ? '<input type="file" id="file-input" accept="image/*,.heic,.heif" multiple style="display:none">' : ''}
+        </div>
+      `;
+
+      main.innerHTML = html;
+
+      // Wire copy buttons (logged-in only)
+      $$('.info-row .copy-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const row = btn.closest('.info-row');
+          copy(row.dataset.copy, row);
+        });
+      });
+
+      // Wire gallery
+      $$('.gallery .item').forEach(item => {
+        item.addEventListener('click', e => {
+          if (e.target.classList.contains('delete')) return;
+          const url = item.dataset.url;
+          $('#lightbox-img').src = url;
+          $('#lightbox').classList.add('open');
+        });
+        const del = item.querySelector('.delete');
+        if (del) del.addEventListener('click', async e => {
+          e.stopPropagation();
+          if (!confirm('Delete this image?')) return;
+          await fetch(`/api/filaments/${filamentId}/images/${item.dataset.id}`, { method: 'DELETE', credentials: 'include' });
+          init();
+        });
+      });
+
+      // Wire upload (logged-in only)
+      const uploadBtn = $('#upload-btn');
+      const fileInput = $('#file-input');
+      if (uploadBtn && fileInput) {
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => uploadFiles(fileInput.files));
+      }
+    }
+
+    async function ensureHeicLib() {
+      if (heicLib) return heicLib;
+      // Lazy-load heic2any only when needed
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = '/heic2any.min.js';
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+      heicLib = window.heic2any;
+      return heicLib;
+    }
+
+    async function fileToJpeg(file) {
+      const isHeic = /heic|heif/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+      if (isHeic) {
+        const lib = await ensureHeicLib();
+        const blob = await lib({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+        return new File([blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' });
+      }
+      // Non-HEIC images upload as-is
+      return file;
+    }
+
+    async function uploadFiles(fileList) {
+      if (!fileList?.length) return;
+      const btn = $('#upload-btn');
+      btn.disabled = true;
+      btn.textContent = 'Uploading…';
+      try {
+        const fd = new FormData();
+        for (const f of fileList) {
+          const out = await fileToJpeg(f);
+          fd.append('images', out);
+        }
+        const res = await fetch(`/api/filaments/${filamentId}/images`, {
+          method: 'POST',
+          credentials: 'include',
+          body: fd,
+        });
+        if (!res.ok) throw new Error('Upload failed');
+        await init();
+      } catch (e) {
+        alert('Upload failed: ' + (e.message || e));
+        btn.disabled = false;
+        btn.textContent = '＋ Add images';
+      }
+    }
+
+    // Lightbox close
+    $('#lightbox-close').addEventListener('click', () => $('#lightbox').classList.remove('open'));
+    $('#lightbox').addEventListener('click', e => { if (e.target === $('#lightbox')) $('#lightbox').classList.remove('open'); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#lightbox').classList.remove('open'); });
+
+    async function init() {
+      try {
+        await detectAuth();
+        const f = await loadFilament();
+        render(f);
+      } catch (e) {
+        $('#main').innerHTML = `<div class="card" style="text-align:center;color:var(--danger)">${escHtml(e.message || 'Failed to load')}</div>`;
+      }
+    }
+    init();
+  </script>
+</body>
+</html>

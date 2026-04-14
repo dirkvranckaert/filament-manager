@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Filament selection</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Filaments">
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #1a202c;
+      --text-muted: #718096;
+      --primary: #0f766e;
+      --primary-h: #0d6059;
+      --radius: 8px;
+      --shadow: 0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0f172a; --surface: #1e293b; --border: #334155;
+        --text: #f1f5f9; --text-muted: #94a3b8;
+        --primary: #14b8a6; --primary-h: #0d9488;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    button { -webkit-appearance: none; appearance: none; font: inherit; color: inherit; background: transparent; border: none; padding: 0; margin: 0; cursor: pointer; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px; color: var(--text); background: var(--bg);
+      min-height: 100vh; min-height: 100dvh;
+    }
+    @supports (padding-top: env(safe-area-inset-top)) {
+      body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+      .topbar { background-clip: padding-box; }
+    }
+    .topbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 16px; height: 56px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow); position: sticky; top: 0; z-index: 10;
+    }
+    .topbar img { width: 28px; height: 28px; }
+    .topbar h1 { font-size: 17px; font-weight: 700; flex: 1; }
+    main { max-width: 1100px; margin: 0 auto; padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+    .intro {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow);
+    }
+    .intro h2 { font-size: 18px; margin-bottom: 4px; }
+    .intro p { color: var(--text-muted); font-size: 13px; }
+    .section-label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+      font-weight: 700; color: var(--text-muted); padding: 0 4px;
+    }
+    .grid {
+      display: grid; gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+    .swatch {
+      position: relative; height: 130px; border-radius: var(--radius);
+      border: 1px solid rgba(0,0,0,.08); box-shadow: 0 2px 8px rgba(0,0,0,.14);
+      display: flex; align-items: flex-end; overflow: hidden; cursor: pointer;
+      background-size: cover; background-position: center;
+    }
+    .swatch .label { width: 100%; padding: 10px 12px; font-weight: 700; }
+    .swatch .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .swatch .meta { font-size: 11px; font-weight: 500; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .swatch .stock {
+      position: absolute; top: 8px; right: 8px;
+      padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+      background: rgba(255,255,255,.92); color: #1a202c;
+    }
+    .swatch .stock.out { background: rgba(0,0,0,.42); color: #fff; }
+    .empty {
+      padding: 32px; text-align: center; color: var(--text-muted);
+      border: 2px dashed var(--border); border-radius: var(--radius);
+    }
+    .err {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 24px; text-align: center; color: var(--text-muted);
+    }
+    @media (max-width: 480px) {
+      main { padding: 12px; gap: 12px; }
+      .grid { grid-template-columns: 1fr; }
+      .swatch { height: 96px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <img src="/favicon.svg" alt="">
+    <h1 id="title">Filaments</h1>
+  </header>
+  <main id="main">
+    <div class="err" id="loading">Loading…</div>
+  </main>
+
+  <script>
+    const $ = sel => document.querySelector(sel);
+    const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+    const slug = location.pathname.replace(/^\/c\//, '');
+    if (!slug) { document.body.innerHTML = '<p style="padding:32px;text-align:center">Invalid customer page</p>'; throw new Error('no slug'); }
+
+    function swatchEl(f) {
+      const style = f.patternImage
+        ? `background-color:${f.colorHex};background-image:url(/uploads/${encodeURIComponent(f.patternImage)})`
+        : `background-color:${f.colorHex}`;
+      // Pick best contrasting label color
+      const lin = [f.colorRGB.r, f.colorRGB.g, f.colorRGB.b].map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      const L = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+      const text = (L + 0.05) / 0.05 >= 1.05 / (L + 0.05) ? '#000' : '#fff';
+      return `
+        <a class="swatch" href="/filament/${f.id}" style="${style};color:${text}">
+          <span class="stock ${f.inStock ? '' : 'out'}">${f.inStock ? 'In stock' : 'Out'}</span>
+          <div class="label">
+            <div class="name">${escHtml(f.brand)}</div>
+            <div class="meta">${escHtml(f.type)} — ${escHtml(f.colorName)}</div>
+          </div>
+        </a>
+      `;
+    }
+
+    async function load() {
+      try {
+        const r = await fetch(`/api/public/customer-pages/${encodeURIComponent(slug)}`);
+        if (!r.ok) throw new Error(r.status === 404 ? 'Page not found' : 'Page unavailable');
+        const cp = await r.json();
+        document.title = `${cp.customerName} — Filaments`;
+        $('#title').textContent = cp.customerName;
+
+        let html = `
+          <div class="intro">
+            <h2>Welcome ${escHtml(cp.customerName)}</h2>
+            <p>Here are the filaments we propose for your project. Tap a swatch for details.</p>
+          </div>
+        `;
+
+        if (cp.selected.length) {
+          html += `<div class="section-label">Our recommendations</div>`;
+          html += `<div class="grid">${cp.selected.map(swatchEl).join('')}</div>`;
+        } else {
+          html += `<div class="empty">No filaments selected yet for this page.</div>`;
+        }
+
+        if (cp.showAllOthers && cp.others.length) {
+          html += `<div class="section-label" style="margin-top:8px">Other available filaments</div>`;
+          html += `<div class="grid">${cp.others.map(swatchEl).join('')}</div>`;
+        }
+
+        $('#main').innerHTML = html;
+      } catch (e) {
+        $('#main').innerHTML = `<div class="err">${escHtml(e.message || 'Failed to load')}</div>`;
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

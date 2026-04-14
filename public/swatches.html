@@ -419,11 +419,9 @@
           const hexEl=node.querySelector('.hexpill');
           if(hexEl)hexEl.textContent=(it.colorHex||'#000000').toUpperCase();
 
+          // Click → open public detail page
           node.addEventListener('click',()=>{
-            const val=(it.colorHex||'').startsWith('#')?it.colorHex:'#'+String(it.colorHex||'').replace(/^#/,'');
-            navigator.clipboard?.writeText(val).then(()=>{
-              if(hexEl){const old=hexEl.textContent;hexEl.textContent='Copied!';setTimeout(()=>hexEl.textContent=old,900);}
-            }).catch(()=>{});
+            window.location.href = `/filament/${it.id}`;
           });
 
           pageEl.appendChild(node);

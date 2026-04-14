@@ -32,6 +32,27 @@ db.exec(`
     token     TEXT PRIMARY KEY,
     expiresAt INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS filament_images (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    filamentId  INTEGER NOT NULL,
+    filename    TEXT NOT NULL,
+    caption     TEXT,
+    sortOrder   INTEGER NOT NULL DEFAULT 0,
+    createdAt   INTEGER NOT NULL,
+    FOREIGN KEY (filamentId) REFERENCES filaments(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_filament_images_filament ON filament_images(filamentId);
+
+  CREATE TABLE IF NOT EXISTS customer_pages (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug          TEXT NOT NULL UNIQUE,
+    customerName  TEXT NOT NULL,
+    filamentIds   TEXT NOT NULL DEFAULT '[]',
+    showAllOthers INTEGER NOT NULL DEFAULT 0,
+    createdAt     INTEGER NOT NULL,
+    updatedAt     INTEGER NOT NULL
+  );
 `);
 
 // Migrations
