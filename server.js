@@ -7,6 +7,9 @@ const multer  = require('multer');
 const AdmZip  = require('adm-zip');
 const db = require('./db');
 const sharedAuth = require('./shared-auth');
+const { readReleaseInfo } = require('./lib/release-info');
+
+const deployInfo = readReleaseInfo(__dirname);
 
 const app = express();
 app.use(express.json());
@@ -512,6 +515,7 @@ app.get('/api/config', (_req, res) => {
     appId: 'filament-manager',
     publicUrl: process.env.PUBLIC_URL || null,
     sharedAuth: sharedAuth.isEnabled(),
+    deploy: deployInfo,
   });
 });
 
