@@ -683,6 +683,7 @@
     <button class="ctx-item" id="ctxOpen">🔍 Open detail page</button>
     <button class="ctx-item" id="ctxImages">📷 Manage images</button>
     <button class="ctx-item" id="ctxEdit">✏️ Edit</button>
+    <button class="ctx-item" id="ctxStockToggle">📦 Mark as out of stock</button>
     <button class="ctx-item danger" id="ctxDelete">🗑️ Delete</button>
   </div>
 
@@ -1164,6 +1165,16 @@
 
     function showCtxMenu(x, y, id){
       ctxTargetId = id;
+      // Set the dynamic label on the stock-toggle entry based on the targeted
+      // filament's current inStock value. Captured here (not at click time) so
+      // the menu reflects the current state when it opens.
+      const targetItem = items.find(x => x.id === id);
+      const stockBtn = $('#ctxStockToggle');
+      if (stockBtn && targetItem) {
+        stockBtn.textContent = targetItem.inStock
+          ? '📦 Mark as out of stock'
+          : '✅ Mark as in stock';
+      }
       ctxMenu.style.left = '0'; ctxMenu.style.top = '0'; ctxMenu.style.display = 'block';
       const mw=ctxMenu.offsetWidth, mh=ctxMenu.offsetHeight;
       ctxMenu.style.left = Math.min(x, window.innerWidth  - mw - 8)+'px';
@@ -1184,6 +1195,36 @@
     });
     $('#ctxEdit').addEventListener('click', e=>{
       e.stopPropagation(); const id=ctxTargetId; hideCtxMenu(); if(id!=null) openForm(id);
+    });
+    $('#ctxStockToggle').addEventListener('click', async e=>{
+      e.stopPropagation(); const id=ctxTargetId; hideCtxMenu();
+      if(id==null) return;
+      const it = items.find(x=>x.id===id);
+      if(!it) return;
+      const next = !it.inStock;
+      try {
+        const updated = await api('PATCH', `/api/filaments/${id}/stock`, { inStock: next });
+        // Patch local state with whatever the server returned (full filament).
+        items = items.map(x => x.id===id ? updated : x);
+        // Try in-place badge update first to avoid a full grid re-render.
+        const card = carousel.querySelector(`[data-id="${id}"]`);
+        const badge = card?.querySelector('.badge.stock');
+        const stockFilterVal = stockFilter?.value ?? '';
+        const filterHidesItem = stockFilterVal !== '' && String(!!updated.inStock) !== stockFilterVal;
+        if (badge && !filterHidesItem) {
+          badge.className = 'badge stock ' + (updated.inStock ? 'in' : 'out');
+          badge.textContent = updated.inStock ? 'In stock' : 'Out';
+        } else {
+          // Either we couldn't find the card or the active stock filter
+          // means the toggled item should now disappear / appear — fall back
+          // to a full re-render.
+          render();
+        }
+      } catch(err){
+        // Match existing handlers' error pattern (see ctxDelete) — surface
+        // a non-blocking failure so the user knows the toggle didn't stick.
+        alert('Toggle stock failed: ' + err.message);
+      }
     });
     $('#ctxDelete').addEventListener('click', async e=>{
       e.stopPropagation(); const id=ctxTargetId; hideCtxMenu();
