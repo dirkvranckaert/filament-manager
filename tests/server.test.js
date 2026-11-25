@@ -212,6 +212,78 @@ describe('Settings API', () => {
   });
 });
 
+/* ================================================================== */
+/*  Stock toggle (PATCH /api/filaments/:id/stock)                       */
+/* ================================================================== */
+describe('Stock toggle endpoint', () => {
+  let filamentId;
+
+  beforeAll(async () => {
+    const res = await request(app).post('/api/filaments').set('Cookie', cookie)
+      .send({
+        brand: 'Prusament', colorName: 'Lipstick Red', type: 'PLA',
+        variant: 'Basic', inStock: true,
+        colorR: 200, colorG: 30, colorB: 30,
+      });
+    filamentId = res.body.id;
+    expect(res.body.inStock).toBe(true);
+  });
+
+  test('PATCH /api/filaments/:id/stock without auth returns 401', async () => {
+    const res = await request(app).patch(`/api/filaments/${filamentId}/stock`)
+      .send({ inStock: false });
+    expect(res.status).toBe(401);
+  });
+
+  test('PATCH /api/filaments/:id/stock flips inStock to false', async () => {
+    const res = await request(app).patch(`/api/filaments/${filamentId}/stock`)
+      .set('Cookie', cookie).send({ inStock: false });
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(filamentId);
+    expect(res.body.inStock).toBe(false);
+    // Other fields must survive the narrow patch untouched.
+    expect(res.body.brand).toBe('Prusament');
+    expect(res.body.colorName).toBe('Lipstick Red');
+    expect(res.body.type).toBe('PLA');
+    expect(res.body.variant).toBe('Basic');
+    expect(res.body.colorRGB).toEqual({ r: 200, g: 30, b: 30 });
+  });
+
+  test('PATCH /api/filaments/:id/stock flips inStock back to true', async () => {
+    const res = await request(app).patch(`/api/filaments/${filamentId}/stock`)
+      .set('Cookie', cookie).send({ inStock: true });
+    expect(res.status).toBe(200);
+    expect(res.body.inStock).toBe(true);
+  });
+
+  test('PATCH /api/filaments/:id/stock persists across reads', async () => {
+    await request(app).patch(`/api/filaments/${filamentId}/stock`)
+      .set('Cookie', cookie).send({ inStock: false });
+    const list = await request(app).get('/api/filaments').set('Cookie', cookie);
+    const row = list.body.find(f => f.id === filamentId);
+    expect(row).toBeDefined();
+    expect(row.inStock).toBe(false);
+  });
+
+  test('PATCH /api/filaments/:id/stock without inStock body returns 400', async () => {
+    const res = await request(app).patch(`/api/filaments/${filamentId}/stock`)
+      .set('Cookie', cookie).send({});
+    expect(res.status).toBe(400);
+  });
+
+  test('PATCH /api/filaments/:id/stock with non-boolean inStock returns 400', async () => {
+    const res = await request(app).patch(`/api/filaments/${filamentId}/stock`)
+      .set('Cookie', cookie).send({ inStock: 'yes' });
+    expect(res.status).toBe(400);
+  });
+
+  test('PATCH /api/filaments/:id/stock on unknown id returns 404', async () => {
+    const res = await request(app).patch('/api/filaments/999999/stock')
+      .set('Cookie', cookie).send({ inStock: true });
+    expect(res.status).toBe(404);
+  });
+});
+
 // Clean up
 afterAll(() => {
   const { db } = require('../server');

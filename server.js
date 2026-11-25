@@ -230,6 +230,21 @@ app.put('/api/filaments/:id', (req, res) => {
   res.json(toClient(row));
 });
 
+// Narrow stock toggle — flips only the inStock flag. Used by the context-menu
+// quick-toggle so a stale frontend cache can't accidentally overwrite other
+// fields with a full PUT.
+app.patch('/api/filaments/:id/stock', (req, res) => {
+  const { inStock } = req.body || {};
+  if (typeof inStock !== 'boolean') {
+    return res.status(400).json({ error: 'inStock (boolean) is required' });
+  }
+  const existing = db.prepare('SELECT id FROM filaments WHERE id=?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  db.prepare('UPDATE filaments SET inStock=? WHERE id=?').run(inStock ? 1 : 0, req.params.id);
+  const row = db.prepare('SELECT * FROM filaments WHERE id=?').get(req.params.id);
+  res.json(toClient(row));
+});
+
 app.delete('/api/filaments/:id', (req, res) => {
   const row = db.prepare('SELECT patternImage FROM filaments WHERE id=?').get(req.params.id);
   if (row?.patternImage) {
