@@ -10,6 +10,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "dependencies": {
     "adm-zip": "^0.5.16",
     "better-sqlite3": "^12.8.0",
