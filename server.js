@@ -61,6 +61,18 @@ function isValidSession(token) {
   return true;
 }
 
+// --- DB health probe (no auth, no session). Runs SELECT 1 on the real DB
+// connection, so a broken native module (better-sqlite3 built for another Node)
+// shows up here. Never leaks error details.
+app.get('/health', (req, res) => {
+  try {
+    db.prepare('SELECT 1').get();
+    res.json({ ok: true });
+  } catch (_e) {
+    res.status(503).json({ ok: false, error: 'db' });
+  }
+});
+
 // --- Auth routes (bypass middleware) ---
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
