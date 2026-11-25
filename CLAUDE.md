@@ -10,7 +10,7 @@ Dirk (primary), potentially shared with customers via the public swatch view. Ac
 
 ## Tech stack
 
-- **Node 20+**, Express 5, better-sqlite3, pm2 (fork, single instance)
+- **Node 22** (`.nvmrc`; prod = Ubuntu Node 22, ABI 127), Express 5, better-sqlite3, pm2 (fork, single instance)
 - **Auth:** session cookie (`fm_session`) + shared JWT for cross-app SSO
 - **File uploads:** multer (memory storage) for pattern images and gallery photos
 - **ZIP archive:** `adm-zip` for backup export/restore
